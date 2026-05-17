@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  background-color: #f0f4f0;
+  color: #1a1a1a;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+/* Custom Table Styles */
+.agri-table-header {
+  @apply bg-primary text-white text-xs font-bold uppercase tracking-wider;
+}
+
+.agri-table-row {
+  @apply border-b border-border text-sm;
+}
+
+.agri-table-row:nth-child(even) {
+  @apply bg-[#fafcfa];
+}
+
+.agri-table-row:nth-child(odd) {
+  @apply bg-white;
+}
+
+/* PKR Formatting Class */
+.font-pkr {
+  font-weight: 700;
+  @apply text-primary;
+}
+
+/* Card Style */
+.agri-card {
+  @apply bg-white rounded-card shadow-card;
+}
+
+/* Sidebar Active State */
+.sidebar-active {
+  @apply bg-white bg-opacity-20;
+}
