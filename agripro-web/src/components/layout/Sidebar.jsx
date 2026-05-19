@@ -19,10 +19,12 @@ import {
   IconManualGearbox,
   IconMilk,
   IconSettings,
-  IconBuildingCommunity
+  IconBuildingCommunity,
+  IconShieldLock,
+  IconX
 } from '@tabler/icons-react';
 
-const Sidebar = ({ isCollapsed, setIsCollapsed, creditEntries = [] }) => {
+const Sidebar = ({ isCollapsed, setIsCollapsed, creditEntries = [], organizations = [], currentOrg, user, isSystemAdmin, onClose }) => {
   const overdueCount = React.useMemo(() => {
     const today = new Date();
     return creditEntries.filter(entry => {
@@ -87,22 +89,42 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, creditEntries = [] }) => {
       title: 'SETTINGS',
       items: [
         { name: 'Manage Farms', path: '/farms', icon: IconBuildingCommunity },
+        { name: 'Org Settings', path: '/settings', icon: IconSettings },
+        { name: 'Team Management', path: '/team', icon: IconUsers },
+        { name: 'Billing & Plan', path: '/billing', icon: IconCreditCard },
+        ...(isSystemAdmin ? [{ name: 'System Admin', path: '/admin', icon: IconShieldLock }] : [])
       ]
     }
   ];
 
   return (
     <div 
-      className={`bg-primary h-screen sticky top-0 transition-all duration-300 flex flex-col ${isCollapsed ? 'w-[60px]' : 'w-[230px]'}`}
+      className={`bg-primary h-screen sticky top-0 transition-all duration-300 flex flex-col shadow-2xl lg:shadow-none ${isCollapsed ? 'w-[60px]' : 'w-[230px]'}`}
     >
       <div className="h-[58px] flex items-center justify-between px-4 border-b border-white border-opacity-10">
-        {!isCollapsed && <span className="text-white font-bold text-xl tracking-tight">AgriPro</span>}
-        <button 
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="text-white hover:bg-white hover:bg-opacity-10 rounded-md p-2"
-        >
-          {isCollapsed ? <IconChevronRight size={18} /> : <IconChevronLeft size={18} />}
-        </button>
+        {!isCollapsed && (
+          <div className="flex flex-col min-w-0">
+            <span className="text-white font-bold text-lg leading-tight tracking-tight">AgriPro</span>
+            <span className="text-white text-opacity-50 text-[10px] font-bold truncate uppercase tracking-wider">
+              {currentOrg?.name || 'Loading Org...'}
+            </span>
+          </div>
+        )}
+        <div className="flex items-center">
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="text-white hover:bg-white hover:bg-opacity-10 rounded-md p-2 flex-shrink-0 hidden lg:block"
+          >
+            {isCollapsed ? <IconChevronRight size={18} /> : <IconChevronLeft size={18} />}
+          </button>
+          {/* Mobile Close Button */}
+          <button 
+            onClick={onClose}
+            className="text-white hover:bg-white hover:bg-opacity-10 rounded-md p-2 flex-shrink-0 lg:hidden"
+          >
+            <IconX size={24} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto py-4 scrollbar-hide">
@@ -118,6 +140,9 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, creditEntries = [] }) => {
                 <NavLink
                   key={itemIdx}
                   to={item.path}
+                  onClick={() => {
+                    if (window.innerWidth < 1024) onClose();
+                  }}
                   className={({ isActive }) => 
                     `flex items-center gap-3 px-4 py-2.5 mx-2 rounded-md transition-colors ${
                       isActive 

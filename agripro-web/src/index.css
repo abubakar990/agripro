@@ -31,6 +31,34 @@ body {
   @apply bg-white;
 }
 
+/* Scrollbar Hide Utility */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-bg;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-border rounded-full hover:bg-text-muted transition-colors;
+}
+
+/* Mobile-friendly spacing */
+@media (max-width: 640px) {
+  .agri-card {
+    @apply rounded-lg;
+  }
+}
+
 /* PKR Formatting Class */
 .font-pkr {
   font-weight: 700;
@@ -46,3 +74,13 @@ body {
 .sidebar-active {
   @apply bg-white bg-opacity-20;
 }
+
+/* Form Styles */
+.agri-label {
+  @apply text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-1 block;
+}
+
+.agri-input {
+  @apply w-full h-11 px-4 bg-white border border-border rounded-input text-sm text-text-primary focus:outline-none focus:border-primary transition-all placeholder:text-text-muted;
+}
+

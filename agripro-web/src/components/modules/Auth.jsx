@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { IconPlant, IconMail, IconLock, IconLoader2 } from '@tabler/icons-react';
+import { IconPlant, IconMail, IconLock, IconLoader2, IconUser } from '@tabler/icons-react';
 import Button from '../shared/Button';
 
 const Auth = () => {
@@ -66,15 +66,14 @@ const Auth = () => {
             {isSignUp && (
               <div className="space-y-1">
                 <label className="agri-label">Full Name</label>
-                <div className="relative">
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-user" width="18" height="18" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" /><path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
-                    </svg>
-                  </div>
+                <div className="relative h-11">
+                  <IconUser 
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" 
+                    size={20} 
+                  />
                   <input
                     type="text"
-                    className="agri-input pl-10"
+                    className="agri-input pl-10 h-full"
                     placeholder="Enter your name"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
@@ -86,11 +85,14 @@ const Auth = () => {
 
             <div className="space-y-1">
               <label className="agri-label">Email Address</label>
-              <div className="relative">
-                <IconMail className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+              <div className="relative h-11">
+                <IconMail 
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" 
+                  size={20} 
+                />
                 <input
                   type="email"
-                  className="agri-input pl-10"
+                  className="agri-input pl-10 h-full"
                   placeholder="name@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -101,11 +103,14 @@ const Auth = () => {
 
             <div className="space-y-1">
               <label className="agri-label">Password</label>
-              <div className="relative">
-                <IconLock className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+              <div className="relative h-11">
+                <IconLock 
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" 
+                  size={20} 
+                />
                 <input
                   type="password"
-                  className="agri-input pl-10"
+                  className="agri-input pl-10 h-full"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

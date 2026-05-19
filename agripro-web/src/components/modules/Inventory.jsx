@@ -6,7 +6,7 @@ import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 
-const Inventory = ({ inventory, farms, categories }) => {
+const Inventory = ({ inventory, farms, categories, user }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(null);
@@ -15,7 +15,7 @@ const Inventory = ({ inventory, farms, categories }) => {
   const [formData, setFormData] = useState({
     farm_id: farms[0]?.id || '',
     item: '',
-    category: categories.length > 0 ? categories[0].name : '',
+    category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
     qty: '',
     unit: 'Bags',
     reorder_level: '',
@@ -63,7 +63,11 @@ const Inventory = ({ inventory, farms, categories }) => {
       if (formData.category === 'ADD_NEW') {
         const { error: catError } = await supabase
           .from('categories')
-          .insert([{ name: customCategory, module: 'inventory' }]);
+          .insert([{ 
+            name: customCategory, 
+            module: 'inventory',
+            user_id: user?.id 
+          }]);
         
         if (catError && catError.code !== '23505') throw catError;
         finalCategory = customCategory;
@@ -102,7 +106,7 @@ const Inventory = ({ inventory, farms, categories }) => {
       setFormData({
         farm_id: farms[0]?.id || '',
         item: '',
-        category: categories.length > 0 ? categories[0].name : '',
+        category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
         qty: '',
         unit: 'Bags',
         reorder_level: '',
@@ -122,7 +126,7 @@ const Inventory = ({ inventory, farms, categories }) => {
     setFormData({
       farm_id: farms[0]?.id || '',
       item: '',
-      category: categories.length > 0 ? categories[0].name : '',
+      category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
       qty: '',
       unit: 'Bags',
       reorder_level: '',

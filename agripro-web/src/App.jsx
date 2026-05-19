@@ -21,6 +21,11 @@ import SprayLog from './components/modules/SprayLog';
 import MandiPrices from './components/modules/MandiPrices';
 import VendorsBuyers from './components/modules/VendorsBuyers';
 import Reports from './components/modules/Reports';
+import Billing from './components/modules/settings/Billing';
+import TeamSettings from './components/modules/settings/TeamSettings';
+import AdminPanel from './components/modules/settings/AdminPanel';
+import OrgSettings from './components/modules/settings/OrgSettings';
+import LandingPage from './components/landing/LandingPage';
 import { useFarmFilter } from './hooks/useFarmFilter';
 import { useDateFilter } from './hooks/useDateFilter';
 import { useSupabaseData } from './hooks/useSupabaseData';
@@ -29,68 +34,84 @@ import { IconPlant } from '@tabler/icons-react';
 function App() {
   const [session, setSession] = useState(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const [currentOrgId, setCurrentOrgId] = useState(localStorage.getItem('agripro_current_org_id'));
 
   useEffect(() => {
+    console.log('App: Fetching session...');
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('App: Session received:', session ? 'User logged in' : 'No session');
       setSession(session);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      console.log('App: Auth state changed:', _event);
+      setSession(prevSession => {
+        // Only update if the session ID has actually changed
+        if (prevSession?.access_token !== newSession?.access_token) {
+          return newSession;
+        }
+        return prevSession;
+      });
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
   const { 
-    farms, 
-    revenue, 
-    expenses, 
-    machinery, 
-    machineUsage,
-    livestock, 
-    animalHealth,
-    workers, 
-    inventory, 
-    creditEntries, 
-    loans, 
-    attendance, 
-    cropCycles, 
-    mandiPrices, 
-    irrigationLog, 
-    sprayLog, 
-    vendorsBuyers,
-    categories,
-    loading 
-  } = useSupabaseData(session);
+    organizations = [],
+    currentOrg = null,
+    farms = [], 
+    revenue = [], 
+    expenses = [], 
+    machinery = [], 
+    machineUsage = [],
+    livestock = [], 
+    animalHealth = [],
+    workers = [], 
+    inventory = [], 
+    creditEntries = [], 
+    loans = [], 
+    attendance = [], 
+    cropCycles = [], 
+    mandiPrices = [], 
+    irrigationLog = [], 
+    sprayLog = [], 
+    vendorsBuyers = [],
+    categories = [],
+    isSystemAdmin = false,
+    loading,
+    refetch
+  } = useSupabaseData(session, currentOrgId);
+
+  const handleOrgSwitch = (orgId) => {
+    setCurrentOrgId(orgId);
+    localStorage.setItem('agripro_current_org_id', orgId);
+  };
 
   const { farmFilter, setFarmFilter, filteredData, currentFarmName } = useFarmFilter(farms);
   const { dateRange, setDateRange, customRange, setCustomRange, filterByDate } = useDateFilter();
 
-  const applyFilters = (data) => {
-    return filterByDate(filteredData(data));
-  };
-
-  const filteredRevenue = applyFilters(revenue);
-  const filteredExpenses = applyFilters(expenses);
-  const filteredMachinery = filteredData(machinery);
-  const filteredLivestock = filteredData(livestock);
-  const filteredWorkers = filteredData(workers);
-  const filteredInventory = filteredData(inventory);
-  const filteredCreditEntries = applyFilters(creditEntries);
-  const filteredLoans = applyFilters(loans);
-  const filteredAttendance = applyFilters(attendance);
-  const filteredCropCycles = applyFilters(cropCycles);
-  const filteredIrrigationLog = applyFilters(irrigationLog);
-  const filteredSprayLog = applyFilters(sprayLog);
-  const filteredMandiPrices = applyFilters(mandiPrices);
-  const filteredVendorsBuyers = filteredData(vendorsBuyers);
-  const filteredMachineUsage = applyFilters(machineUsage);
+  console.log('App: Render state:', { hasSession: !!session, loading, farmsCount: farms.length, categoriesCount: categories.length, currentOrg: currentOrg?.name });
 
   if (!session) {
-    return <Auth />;
+    if (showAuth) {
+      return (
+        <div className="relative">
+          <button 
+            onClick={() => setShowAuth(false)}
+            className="absolute top-8 left-8 text-primary font-bold flex items-center gap-2 hover:underline z-50"
+          >
+            <IconPlant size={20} />
+            Back to Home
+          </button>
+          <Auth />
+        </div>
+      );
+    }
+    return <LandingPage onGetStarted={() => setShowAuth(true)} />;
   }
 
   if (loading) {
@@ -101,143 +122,218 @@ function App() {
     );
   }
 
-  return (
-    <Router>
-      <div className="flex min-h-screen bg-bg">
-        <Sidebar 
-          isCollapsed={isSidebarCollapsed} 
-          setIsCollapsed={setIsSidebarCollapsed} 
-          creditEntries={creditEntries}
-        />
-        
-        <div className="flex-1 flex flex-col min-w-0">
-          <Header 
-            farms={farms} 
-            farmFilter={farmFilter} 
-            setFarmFilter={setFarmFilter} 
-            currentFarmName={currentFarmName} 
-            user={session.user}
-          />
+  try {
+    const applyFilters = (data) => {
+      return filterByDate(filteredData(data));
+    };
+
+    const filteredRevenue = applyFilters(revenue);
+    const filteredExpenses = applyFilters(expenses);
+    const filteredMachinery = filteredData(machinery);
+    const filteredLivestock = filteredData(livestock);
+    const filteredWorkers = filteredData(workers);
+    const filteredInventory = filteredData(inventory);
+    const filteredCreditEntries = applyFilters(creditEntries);
+    const filteredLoans = applyFilters(loans);
+    const filteredAttendance = applyFilters(attendance);
+    const filteredCropCycles = applyFilters(cropCycles);
+    const filteredIrrigationLog = applyFilters(irrigationLog);
+    const filteredSprayLog = applyFilters(sprayLog);
+    const filteredMandiPrices = applyFilters(mandiPrices);
+    const filteredVendorsBuyers = filteredData(vendorsBuyers);
+    const filteredMachineUsage = applyFilters(machineUsage);
+
+    return (
+      <Router>
+        <div className="flex min-h-screen bg-bg relative">
+          {/* Mobile Sidebar Overlay */}
+          {isMobileSidebarOpen && (
+            <div 
+              className="fixed inset-0 bg-black/50 z-[100] lg:hidden"
+              onClick={() => setIsMobileSidebarOpen(false)}
+            />
+          )}
+
+          <div className={`
+            fixed inset-y-0 left-0 z-[101] lg:relative lg:z-0
+            ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+            transition-transform duration-300 ease-in-out
+          `}>
+            <Sidebar 
+              isCollapsed={isSidebarCollapsed} 
+              setIsCollapsed={setIsSidebarCollapsed} 
+              creditEntries={creditEntries}
+              organizations={organizations}
+              currentOrg={currentOrg}
+              user={session.user}
+              isSystemAdmin={isSystemAdmin}
+              onClose={() => setIsMobileSidebarOpen(false)}
+            />
+          </div>
           
-          <main className="flex-1 p-6 overflow-y-auto">
-            <FarmFilterBar 
+          <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+            <Header 
               farms={farms} 
               farmFilter={farmFilter} 
-              setFarmFilter={setFarmFilter}
-              dateRange={dateRange}
-              setDateRange={setDateRange}
-              customRange={customRange}
-              setCustomRange={setCustomRange}
+              setFarmFilter={setFarmFilter} 
+              currentFarmName={currentFarmName} 
+              user={session.user}
+              organizations={organizations}
+              currentOrg={currentOrg}
+              onOrgSwitch={handleOrgSwitch}
+              toggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
             />
             
-            <Routes>
-              <Route path="/" element={
-                <Dashboard 
-                  revenue={filteredRevenue}
-                  expenses={filteredExpenses}
-                  farms={farms}
-                  workers={filteredWorkers}
-                  machinery={filteredMachinery}
-                  livestock={filteredLivestock}
-                  creditEntries={filteredCreditEntries}
-                  loans={filteredLoans}
-                  inventory={filteredInventory}
-                  attendance={filteredAttendance}
-                />
-              } />
-              <Route path="/revenue" element={
-                <Revenue 
-                  revenue={filteredRevenue} 
-                  farms={farms} 
-                  categories={categories.filter(c => c.module === 'revenue')} 
-                />
-              } />
-              <Route path="/farms" element={
-                <Farms farms={farms} />
-              } />
-              <Route path="/expenses" element={
-                <Expenses 
-                  expenses={filteredExpenses} 
-                  farms={farms} 
-                  categories={categories.filter(c => c.module === 'expense')} 
-                />
-              } />
-              <Route path="/credit" element={
-                <CreditLedger creditEntries={filteredCreditEntries} farms={farms} />
-              } />
-              <Route path="/loans" element={
-                <Loans loans={filteredLoans} farms={farms} />
-              } />
-              <Route path="/crop-cycles" element={
-                <CropCycles cropCycles={filteredCropCycles} farms={farms} />
-              } />
-              <Route path="/irrigation" element={
-                <Irrigation irrigationLog={filteredIrrigationLog} farms={farms} />
-              } />
-              <Route path="/spray" element={
-                <SprayLog sprayLog={filteredSprayLog} farms={farms} />
-              } />
-              <Route path="/mandi" element={
-                <MandiPrices mandiPrices={filteredMandiPrices} />
-              } />
-              <Route path="/labor" element={
-                <Labor workers={filteredWorkers} attendance={filteredAttendance} farms={farms} />
-              } />
-              <Route path="/inventory" element={
-                <Inventory 
-                  inventory={filteredInventory} 
-                  farms={farms} 
-                  categories={categories.filter(c => c.module === 'inventory')} 
-                />
-              } />
-              <Route path="/machinery" element={
-                <Machinery 
-                  machinery={filteredMachinery} 
-                  machineUsage={filteredMachineUsage} 
-                  farms={farms} 
-                  categories={categories.filter(c => c.module === 'machinery')} 
-                />
-              } />
-              <Route path="/livestock" element={
-                <Livestock 
-                  livestock={filteredLivestock} 
-                  animalHealth={animalHealth} 
-                  farms={farms} 
-                  categories={categories.filter(c => c.module === 'livestock')} 
-                />
-              } />
-              <Route path="/parties" element={
-                <VendorsBuyers vendorsBuyers={filteredVendorsBuyers} />
-              } />
-              <Route path="/reports" element={
-                <Reports 
-                  revenue={filteredRevenue}
-                  expenses={filteredExpenses}
-                  farms={farms}
-                  machinery={filteredMachinery}
-                  livestock={filteredLivestock}
-                  inventory={filteredInventory}
-                  creditEntries={filteredCreditEntries}
-                  loans={filteredLoans}
-                />
-              } />
-              <Route path="*" element={
-                <div className="agri-card p-12 flex flex-col items-center justify-center text-center">
-                  <div className="w-16 h-16 bg-bg rounded-full flex items-center justify-center text-primary mb-4">
-                    <IconPlant size={32} />
+            <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
+              <FarmFilterBar 
+                farms={farms} 
+                farmFilter={farmFilter} 
+                setFarmFilter={setFarmFilter}
+                dateRange={dateRange}
+                setDateRange={setDateRange}
+                customRange={customRange}
+                setCustomRange={setCustomRange}
+              />
+              
+              <Routes>
+                <Route path="/" element={
+                  <Dashboard 
+                    revenue={filteredRevenue}
+                    expenses={filteredExpenses}
+                    farms={farms}
+                    workers={filteredWorkers}
+                    machinery={filteredMachinery}
+                    livestock={filteredLivestock}
+                    creditEntries={filteredCreditEntries}
+                    loans={filteredLoans}
+                    inventory={filteredInventory}
+                    attendance={filteredAttendance}
+                  />
+                } />
+                <Route path="/revenue" element={
+                  <Revenue 
+                    revenue={filteredRevenue} 
+                    farms={farms} 
+                    categories={categories.filter(c => c.module === 'revenue')} 
+                    user={session.user}
+                  />
+                } />
+                <Route path="/farms" element={
+                  <Farms farms={farms} currentOrg={currentOrg} />
+                } />
+                <Route path="/billing" element={
+                  <Billing currentOrg={currentOrg} refetch={refetch} />
+                } />
+                <Route path="/settings" element={
+                  <OrgSettings currentOrg={currentOrg} user={session.user} refetch={refetch} />
+                } />
+                <Route path="/team" element={
+                  <TeamSettings currentOrg={currentOrg} user={session.user} farms={farms} />
+                } />
+                {isSystemAdmin && (
+                  <Route path="/admin" element={<AdminPanel />} />
+                )}
+                <Route path="/expenses" element={
+                  <Expenses 
+                    expenses={filteredExpenses} 
+                    farms={farms} 
+                    categories={categories.filter(c => c.module === 'expense')} 
+                    user={session.user}
+                  />
+                } />
+                <Route path="/credit" element={
+                  <CreditLedger creditEntries={filteredCreditEntries} farms={farms} />
+                } />
+                <Route path="/loans" element={
+                  <Loans loans={filteredLoans} farms={farms} />
+                } />
+                <Route path="/crop-cycles" element={
+                  <CropCycles cropCycles={filteredCropCycles} farms={farms} />
+                } />
+                <Route path="/irrigation" element={
+                  <Irrigation irrigationLog={filteredIrrigationLog} farms={farms} />
+                } />
+                <Route path="/spray" element={
+                  <SprayLog sprayLog={filteredSprayLog} farms={farms} />
+                } />
+                <Route path="/mandi" element={
+                  <MandiPrices mandiPrices={filteredMandiPrices} />
+                } />
+                <Route path="/labor" element={
+                  <Labor workers={filteredWorkers} attendance={filteredAttendance} farms={farms} />
+                } />
+                <Route path="/inventory" element={
+                  <Inventory 
+                    inventory={filteredInventory} 
+                    farms={farms} 
+                    categories={categories.filter(c => c.module === 'inventory')} 
+                    user={session.user}
+                  />
+                } />
+                <Route path="/machinery" element={
+                  <Machinery 
+                    machinery={filteredMachinery} 
+                    machineUsage={filteredMachineUsage} 
+                    farms={farms} 
+                    categories={categories.filter(c => c.module === 'machinery')} 
+                    user={session.user}
+                  />
+                } />
+                <Route path="/livestock" element={
+                  <Livestock 
+                    livestock={filteredLivestock} 
+                    animalHealth={animalHealth} 
+                    farms={farms} 
+                    categories={categories.filter(c => c.module === 'livestock')} 
+                    user={session.user}
+                  />
+                } />                <Route path="/parties" element={
+                  <VendorsBuyers vendorsBuyers={filteredVendorsBuyers} />
+                } />
+                <Route path="/reports" element={
+                  <Reports 
+                    revenue={filteredRevenue}
+                    expenses={filteredExpenses}
+                    farms={farms}
+                    machinery={filteredMachinery}
+                    livestock={filteredLivestock}
+                    inventory={filteredInventory}
+                    creditEntries={filteredCreditEntries}
+                    loans={filteredLoans}
+                  />
+                } />
+                <Route path="*" element={
+                  <div className="agri-card p-12 flex flex-col items-center justify-center text-center">
+                    <div className="w-16 h-16 bg-bg rounded-full flex items-center justify-center text-primary mb-4">
+                      <IconPlant size={32} />
+                    </div>
+                    <h2 className="text-lg font-bold text-text-primary mb-2">Module Not Found</h2>
+                    <p className="text-sm text-text-muted max-w-xs">
+                      The requested page could not be found.
+                    </p>
                   </div>
-                  <h2 className="text-lg font-bold text-text-primary mb-2">Module Not Found</h2>
-                  <p className="text-sm text-text-muted max-w-xs">
-                    The requested page could not be found.
-                  </p>
-                </div>
-              } />
-            </Routes>
-          </main>
+                } />
+              </Routes>
+            </main>
+          </div>
         </div>
+      </Router>
+    );
+  } catch (err) {
+    console.error('App: Rendering error:', err);
+    return (
+      <div className="p-10 text-center">
+        <h1 className="text-xl font-bold text-red-600">Something went wrong</h1>
+        <p className="text-gray-600">{err.message}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-4 px-4 py-2 bg-primary text-white rounded"
+        >
+          Reload Page
+        </button>
       </div>
-    </Router>
-  );
+    );
+  }
 }
 
 export default App;

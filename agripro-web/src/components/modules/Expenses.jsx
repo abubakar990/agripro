@@ -6,7 +6,7 @@ import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
-const Expenses = ({ expenses, farms, categories }) => {
+const Expenses = ({ expenses, farms, categories, user }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -14,7 +14,7 @@ const Expenses = ({ expenses, farms, categories }) => {
   const [formData, setFormData] = useState({
     farm_id: farms.length > 0 ? farms[0].id : '',
     date: new Date().toISOString().split('T')[0],
-    category: categories.length > 0 ? categories[0].name : '',
+    category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
     description: '',
     party: '',
     amount: ''
@@ -23,11 +23,11 @@ const Expenses = ({ expenses, farms, categories }) => {
   const stats = useMemo(() => {
     const total = expenses.reduce((sum, e) => sum + e.amount, 0);
     const count = expenses.length;
-    const categories = expenses.reduce((acc, e) => {
+    const catSum = expenses.reduce((acc, e) => {
       acc[e.category] = (acc[e.category] || 0) + e.amount;
       return acc;
     }, {});
-    const topCategory = Object.entries(categories).sort((a, b) => b[1] - a[1])[0];
+    const topCategory = Object.entries(catSum).sort((a, b) => b[1] - a[1])[0];
     
     return {
       total,
@@ -82,7 +82,11 @@ const Expenses = ({ expenses, farms, categories }) => {
       if (formData.category === 'ADD_NEW') {
         const { error: catError } = await supabase
           .from('categories')
-          .insert([{ name: customCategory, module: 'expense' }]);
+          .insert([{ 
+            name: customCategory, 
+            module: 'expense',
+            user_id: user?.id 
+          }]);
         
         if (catError && catError.code !== '23505') throw catError; // Ignore unique constraint violation
         finalCategory = customCategory;
@@ -115,7 +119,7 @@ const Expenses = ({ expenses, farms, categories }) => {
       setFormData({
         farm_id: farms.length > 0 ? farms[0].id : '',
         date: new Date().toISOString().split('T')[0],
-        category: categories.length > 0 ? categories[0].name : '',
+        category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
         description: '',
         party: '',
         amount: ''
@@ -146,7 +150,7 @@ const Expenses = ({ expenses, farms, categories }) => {
     setFormData({
       farm_id: farms.length > 0 ? farms[0].id : '',
       date: new Date().toISOString().split('T')[0],
-      category: categories.length > 0 ? categories[0].name : '',
+      category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
       description: '',
       party: '',
       amount: ''
@@ -167,7 +171,7 @@ const Expenses = ({ expenses, farms, categories }) => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="agri-card p-5 border-l-4 border-expense">
           <div className="flex justify-between items-start mb-2">
             <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Total Expenses</span>

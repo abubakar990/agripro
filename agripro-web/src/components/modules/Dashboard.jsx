@@ -145,7 +145,7 @@ const Dashboard = ({ revenue, expenses, farms, workers, machinery, livestock, cr
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard title="Total Revenue" value={formatPKR(stats.totalRev)} icon={IconTrendingUp} colorClass="border-revenue" />
         <KpiCard title="Total Expenses" value={formatPKR(stats.totalExp)} icon={IconTrendingDown} colorClass="border-expense" />
         <KpiCard title="Net Profit / Loss" value={formatPKR(stats.netProfit)} icon={IconScale} colorClass={stats.netProfit >= 0 ? "border-accent-blue" : "border-expense"} />

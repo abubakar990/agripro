@@ -97,7 +97,7 @@ const MachineCard = ({ machine, farm, usage, onLogUsage, onEdit, onDelete }) => 
   );
 };
 
-const Machinery = ({ machinery, farms, machineUsage = [], categories = [] }) => {
+const Machinery = ({ machinery, farms, machineUsage = [], categories = [], user }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -108,7 +108,7 @@ const Machinery = ({ machinery, farms, machineUsage = [], categories = [] }) => 
   const [formData, setFormData] = useState({
     farm_id: farms.length > 0 ? farms[0].id : '',
     name: '',
-    type: categories.length > 0 ? categories[0].name : 'Tractor',
+    type: categories.length > 0 ? categories[0].name : 'ADD_NEW',
     year: new Date().getFullYear(),
     reg_no: '',
     purchase_price: '',
@@ -181,7 +181,11 @@ const Machinery = ({ machinery, farms, machineUsage = [], categories = [] }) => 
       if (formData.type === 'ADD_NEW') {
         const { error: catError } = await supabase
           .from('categories')
-          .insert([{ name: customCategory, module: 'machinery' }]);
+          .insert([{ 
+            name: customCategory, 
+            module: 'machinery',
+            user_id: user?.id 
+          }]);
         
         if (catError && catError.code !== '23505') throw catError;
         finalType = customCategory;
@@ -213,7 +217,7 @@ const Machinery = ({ machinery, farms, machineUsage = [], categories = [] }) => 
       setFormData({
         farm_id: farms.length > 0 ? farms[0].id : '',
         name: '',
-        type: categories.length > 0 ? categories[0].name : 'Tractor',
+        type: categories.length > 0 ? categories[0].name : 'ADD_NEW',
         year: new Date().getFullYear(),
         reg_no: '',
         purchase_price: '',
@@ -270,7 +274,7 @@ const Machinery = ({ machinery, farms, machineUsage = [], categories = [] }) => 
     setFormData({
       farm_id: farms.length > 0 ? farms[0].id : '',
       name: '',
-      type: categories.length > 0 ? categories[0].name : 'Tractor',
+      type: categories.length > 0 ? categories[0].name : 'ADD_NEW',
       year: new Date().getFullYear(),
       reg_no: '',
       purchase_price: '',

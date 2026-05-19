@@ -6,7 +6,7 @@ import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
-const Farms = ({ farms }) => {
+const Farms = ({ farms, currentOrg }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingFarm, setEditingFarm] = useState(null);
@@ -65,6 +65,7 @@ const Farms = ({ farms }) => {
       } else {
         const { error } = await supabase.from('farms').insert([{
           ...formData,
+          org_id: currentOrg?.id,
           land_value: parseFloat(formData.land_value) || 0
         }]);
         if (error) throw error;
@@ -101,6 +102,13 @@ const Farms = ({ farms }) => {
   };
 
   const openAddModal = () => {
+    // SaaS Limit: Free tier can only manage 1 farm
+    if (currentOrg?.subscription_tier !== 'pro' && farms.length >= 1) {
+      alert('Your organization is on the Free Tier which is limited to 1 farm. Please upgrade to the Pro Plan to manage unlimited farms!');
+      window.location.hash = '/billing'; // Or use navigate if available, but hash works with some routers
+      return;
+    }
+
     setEditingFarm(null);
     setFormData({
       name: '',

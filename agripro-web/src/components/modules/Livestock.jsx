@@ -134,7 +134,7 @@ const AnimalCard = ({ animal, farm, healthEvents = [], onRecordHealth, onEdit })
   );
 };
 
-const Livestock = ({ livestock = [], farms = [], animalHealth = [], categories = [] }) => {
+const Livestock = ({ livestock = [], farms = [], animalHealth = [], categories = [], user }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -144,7 +144,7 @@ const Livestock = ({ livestock = [], farms = [], animalHealth = [], categories =
 
   const [formData, setFormData] = useState({
     farm_id: farms[0]?.id || '',
-    type: categories.length > 0 ? categories[0].name : 'Cow',
+    type: categories.length > 0 ? categories[0].name : 'ADD_NEW',
     tag: '',
     name: '',
     gender: 'Female',
@@ -209,7 +209,11 @@ const Livestock = ({ livestock = [], farms = [], animalHealth = [], categories =
       if (formData.type === 'ADD_NEW') {
         const { error: catError } = await supabase
           .from('categories')
-          .insert([{ name: customCategory, module: 'livestock' }]);
+          .insert([{ 
+            name: customCategory, 
+            module: 'livestock',
+            user_id: user?.id 
+          }]);
         
         if (catError && catError.code !== '23505') throw catError;
         finalType = customCategory;
@@ -242,7 +246,7 @@ const Livestock = ({ livestock = [], farms = [], animalHealth = [], categories =
       setCustomCategory('');
       setFormData({
         farm_id: farms[0]?.id || '',
-        type: categories.length > 0 ? categories[0].name : 'Cow',
+        type: categories.length > 0 ? categories[0].name : 'ADD_NEW',
         tag: '',
         name: '',
         gender: 'Female',
@@ -265,7 +269,7 @@ const Livestock = ({ livestock = [], farms = [], animalHealth = [], categories =
     setCustomCategory('');
     setFormData({
       farm_id: farms[0]?.id || '',
-      type: categories.length > 0 ? categories[0].name : 'Cow',
+      type: categories.length > 0 ? categories[0].name : 'ADD_NEW',
       tag: '',
       name: '',
       gender: 'Female',
