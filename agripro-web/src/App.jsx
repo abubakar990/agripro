@@ -34,8 +34,14 @@ import { IconPlant } from '@tabler/icons-react';
 function App() {
   const [session, setSession] = useState(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [currentOrgId, setCurrentOrgId] = useState(localStorage.getItem('agripro_current_org_id'));
+
+  useEffect(() => {
+    // Close mobile sidebar on route change
+    setIsMobileSidebarOpen(false);
+  }, []);
 
   useEffect(() => {
     console.log('App: Fetching session...');
