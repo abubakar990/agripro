@@ -6,7 +6,7 @@ import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
-const CropCycles = ({ cropCycles = [], farms = [] }) => {
+const CropCycles = ({ cropCycles = [], farms = [], farmPlots = [] }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -21,7 +21,12 @@ const CropCycles = ({ cropCycles = [], farms = [] }) => {
     exp_yield: '',
     act_yield: '',
     revenue: '',
-    note: ''
+    note: '',
+    area_acres: '',
+    plot_id: '',
+    exp_yield_qty: '',
+    act_yield_qty: '',
+    yield_unit: 'Maund'
   });
 
   const handleInputChange = (e) => {
@@ -42,7 +47,12 @@ const CropCycles = ({ cropCycles = [], farms = [] }) => {
       exp_yield: cycle.exp_yield || '',
       act_yield: cycle.act_yield || '',
       revenue: cycle.revenue?.toString() || '',
-      note: cycle.note || ''
+      note: cycle.note || '',
+      area_acres: cycle.area_acres?.toString() || '',
+      plot_id: cycle.plot_id?.toString() || '',
+      exp_yield_qty: cycle.exp_yield_qty?.toString() || '',
+      act_yield_qty: cycle.act_yield_qty?.toString() || '',
+      yield_unit: cycle.yield_unit || 'Maund'
     });
     setIsModalOpen(true);
   };
@@ -68,7 +78,12 @@ const CropCycles = ({ cropCycles = [], farms = [] }) => {
           .update({
             ...formData,
             farm_id: parseInt(formData.farm_id),
-            revenue: formData.revenue ? parseFloat(formData.revenue) : 0
+            revenue: formData.revenue ? parseFloat(formData.revenue) : 0,
+            area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
+            plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
+            exp_yield_qty: formData.exp_yield_qty ? parseFloat(formData.exp_yield_qty) : null,
+            act_yield_qty: formData.act_yield_qty ? parseFloat(formData.act_yield_qty) : null,
+            yield_unit: formData.yield_unit || null
           })
           .eq('id', editingId);
         if (error) throw error;
@@ -76,7 +91,12 @@ const CropCycles = ({ cropCycles = [], farms = [] }) => {
         const { error } = await supabase.from('crop_cycles').insert([{
           ...formData,
           farm_id: parseInt(formData.farm_id),
-          revenue: formData.revenue ? parseFloat(formData.revenue) : 0
+          revenue: formData.revenue ? parseFloat(formData.revenue) : 0,
+          area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
+          plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
+          exp_yield_qty: formData.exp_yield_qty ? parseFloat(formData.exp_yield_qty) : null,
+          act_yield_qty: formData.act_yield_qty ? parseFloat(formData.act_yield_qty) : null,
+          yield_unit: formData.yield_unit || null
         }]);
         if (error) throw error;
       }
@@ -94,7 +114,12 @@ const CropCycles = ({ cropCycles = [], farms = [] }) => {
         exp_yield: '',
         act_yield: '',
         revenue: '',
-        note: ''
+        note: '',
+        area_acres: '',
+        plot_id: '',
+        exp_yield_qty: '',
+        act_yield_qty: '',
+        yield_unit: 'Maund'
       });
     } catch (error) {
       console.error('Error saving crop cycle:', error);
@@ -117,7 +142,12 @@ const CropCycles = ({ cropCycles = [], farms = [] }) => {
       exp_yield: '',
       act_yield: '',
       revenue: '',
-      note: ''
+      note: '',
+      area_acres: '',
+      plot_id: '',
+      exp_yield_qty: '',
+      act_yield_qty: '',
+      yield_unit: 'Maund'
     });
     setIsModalOpen(true);
   };
@@ -138,6 +168,13 @@ const CropCycles = ({ cropCycles = [], farms = [] }) => {
     const totalRevenue = cropCycles.reduce((sum, c) => sum + (Number(c.revenue) || 0), 0);
     return { active, totalRevenue };
   }, [cropCycles]);
+
+  const avgYieldPerAcre = (() => {
+    const harvested = cropCycles.filter(c => c.status === 'Harvested' && c.act_yield_qty && c.area_acres);
+    if (harvested.length === 0) return null;
+    const total = harvested.reduce((sum, c) => sum + (c.act_yield_qty / c.area_acres), 0);
+    return (total / harvested.length).toFixed(1);
+  })();
 
   return (
     <div className="space-y-6">
@@ -172,7 +209,9 @@ const CropCycles = ({ cropCycles = [], farms = [] }) => {
             <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Avg Yield/Acre</span>
             <IconChartBar size={20} className="text-accent-amber" />
           </div>
-          <span className="text-lg font-bold text-text-primary">Varies by Crop</span>
+          <span className="text-lg font-bold text-text-primary">
+            {avgYieldPerAcre !== null ? `${avgYieldPerAcre} / Acre` : 'Varies by Crop'}
+          </span>
         </div>
       </div>
 
@@ -222,11 +261,17 @@ const CropCycles = ({ cropCycles = [], farms = [] }) => {
                     )}
                     <div className="flex items-center gap-3 text-sm">
                       <IconChartBar size={16} className="text-text-muted" />
-                      <span className="text-text-secondary">Area: <span className="text-text-primary font-medium">{cycle.area}</span></span>
+                      <span className="text-text-secondary">Area: <span className="text-text-primary font-medium">{cycle.area_acres ? `${cycle.area_acres} Acres` : cycle.area}</span></span>
                     </div>
+                    {cycle.act_yield_qty && cycle.area_acres && (
+                      <div className="flex items-center gap-3 text-sm">
+                        <IconChartBar size={16} className="text-text-muted" />
+                        <span className="text-text-secondary">Yield/Acre: <span className="text-text-primary font-medium">{(cycle.act_yield_qty / cycle.area_acres).toFixed(1)} {cycle.yield_unit}/Acre</span></span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-3 text-sm">
                       <IconReceipt size={16} className="text-text-muted" />
-                      <span className="text-text-secondary">Revenue: <span className="text-accent-green font-bold">{formatPKR(cycle.revenue)}</span></span>
+                      <span className="text-text-secondary">Revenue: <span className="text-accent-green font-bold">{formatPKR(cycle.revenue)}</span> {cycle.revenue && cycle.area_acres ? `(${formatPKR(cycle.revenue / cycle.area_acres)}/ac)` : ''}</span>
                     </div>
                   </div>
                 </div>
@@ -325,15 +370,21 @@ const CropCycles = ({ cropCycles = [], farms = [] }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
-              <label className="agri-label">Area (Acres/Kanals)</label>
-              <input
-                type="text"
-                name="area"
-                value={formData.area}
-                onChange={handleInputChange}
-                placeholder="e.g. 5 Acres"
-                className="agri-input"
-              />
+              <label className="agri-label">Plot (Optional)</label>
+              <select name="plot_id" value={formData.plot_id} onChange={(e) => {
+                const plotId = e.target.value;
+                const plot = farmPlots.find(p => p.id === parseInt(plotId));
+                setFormData(prev => ({ 
+                  ...prev, 
+                  plot_id: plotId,
+                  area_acres: plot?.area_acres?.toString() || prev.area_acres
+                }));
+              }} className="agri-input">
+                <option value="">— All Farm —</option>
+                {farmPlots.filter(p => p.farm_id === parseInt(formData.farm_id)).map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.area_acres} ac)</option>
+                ))}
+              </select>
             </div>
             <div className="flex flex-col gap-1">
               <label className="agri-label">Sowing Date</label>
@@ -350,7 +401,33 @@ const CropCycles = ({ cropCycles = [], farms = [] }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
-              <label className="agri-label">Expected Yield</label>
+              <label className="agri-label">Area (Text)</label>
+              <input
+                type="text"
+                name="area"
+                value={formData.area}
+                onChange={handleInputChange}
+                placeholder="e.g. 5 Acres"
+                className="agri-input"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="agri-label">Area (Acres)</label>
+              <input
+                type="number"
+                name="area_acres"
+                value={formData.area_acres}
+                onChange={handleInputChange}
+                step="0.01"
+                placeholder="Auto"
+                className="agri-input"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="agri-label">Expected Yield (Text)</label>
               <input
                 type="text"
                 name="exp_yield"
@@ -361,12 +438,13 @@ const CropCycles = ({ cropCycles = [], farms = [] }) => {
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="agri-label">Harvest Date (Est/Act)</label>
+              <label className="agri-label">Actual Yield (Text)</label>
               <input
-                type="date"
-                name="harvest_date"
-                value={formData.harvest_date}
+                type="text"
+                name="act_yield"
+                value={formData.act_yield}
                 onChange={handleInputChange}
+                placeholder="e.g. 42 Maunds"
                 className="agri-input"
               />
             </div>
@@ -374,13 +452,39 @@ const CropCycles = ({ cropCycles = [], farms = [] }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
-              <label className="agri-label">Actual Yield</label>
+              <label className="agri-label">Expected Yield Qty</label>
+              <div className="flex gap-2">
+                <input type="number" name="exp_yield_qty" value={formData.exp_yield_qty} onChange={handleInputChange} step="0.01" className="agri-input flex-1" />
+                <select name="yield_unit" value={formData.yield_unit} onChange={handleInputChange} className="agri-input w-28">
+                  <option value="Maund">Maund</option>
+                  <option value="Kg">Kg</option>
+                  <option value="Ton">Ton</option>
+                  <option value="Mann">Mann</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="agri-label">Actual Yield Qty</label>
+              <div className="flex gap-2">
+                <input type="number" name="act_yield_qty" value={formData.act_yield_qty} onChange={handleInputChange} step="0.01" className="agri-input flex-1" />
+                <select name="yield_unit" value={formData.yield_unit} onChange={handleInputChange} className="agri-input w-28">
+                  <option value="Maund">Maund</option>
+                  <option value="Kg">Kg</option>
+                  <option value="Ton">Ton</option>
+                  <option value="Mann">Mann</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="agri-label">Harvest Date (Est/Act)</label>
               <input
-                type="text"
-                name="act_yield"
-                value={formData.act_yield}
+                type="date"
+                name="harvest_date"
+                value={formData.harvest_date}
                 onChange={handleInputChange}
-                placeholder="e.g. 42 Maunds"
                 className="agri-input"
               />
             </div>

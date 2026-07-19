@@ -7,6 +7,7 @@ export function useSupabaseData(session, preferredOrgId) {
     currentOrg: null,
     isSystemAdmin: false,
     farms: [],
+    farmPlots: [],
     revenue: [],
     expenses: [],
     creditEntries: [],
@@ -102,14 +103,17 @@ export function useSupabaseData(session, preferredOrgId) {
       // Nested fetches for details (health, etc)
       let animalHealth = [];
       let cropCycles = [];
+      let farmPlots = [];
       
       if (farmIds.length > 0) {
-        const [{ data: health }, { data: cycles }] = await Promise.all([
+        const [{ data: health }, { data: cycles }, { data: plots }] = await Promise.all([
           supabase.from('animal_health').select('*').in('livestock_id', (await supabase.from('livestock').select('id').in('farm_id', farmIds)).data?.map(l => l.id) || []).order('date', { ascending: false }),
-          supabase.from('crop_cycles').select('*').in('farm_id', farmIds).order('sowing_date', { ascending: false })
+          supabase.from('crop_cycles').select('*').in('farm_id', farmIds).order('sowing_date', { ascending: false }),
+          supabase.from('farm_plots').select('*').in('farm_id', farmIds).order('name')
         ]);
         animalHealth = health || [];
         cropCycles = cycles || [];
+        farmPlots = plots || [];
       }
 
       const isSystemAdmin = organizations?.some(org => 
@@ -133,6 +137,7 @@ export function useSupabaseData(session, preferredOrgId) {
         livestock: livestock || [],
         animalHealth,
         cropCycles,
+        farmPlots,
         mandiPrices: mandiPrices || [],
         irrigationLog: irrigationLog || [],
         sprayLog: sprayLog || [],
@@ -181,6 +186,7 @@ export function useSupabaseData(session, preferredOrgId) {
         livestock: [],
         animalHealth: [],
         cropCycles: [],
+        farmPlots: [],
         mandiPrices: [],
         irrigationLog: [],
         sprayLog: [],

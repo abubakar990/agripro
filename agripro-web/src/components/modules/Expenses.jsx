@@ -6,7 +6,7 @@ import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
-const Expenses = ({ expenses, farms, categories, user }) => {
+const Expenses = ({ expenses, farms, categories, user, farmPlots = [], cropCycles = [] }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -17,12 +17,20 @@ const Expenses = ({ expenses, farms, categories, user }) => {
     category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
     description: '',
     party: '',
-    amount: ''
+    amount: '',
+    plot_id: '',
+    crop_cycle_id: '',
+    area_acres: ''
   });
 
   const stats = useMemo(() => {
     const total = expenses.reduce((sum, e) => sum + e.amount, 0);
     const count = expenses.length;
+    const totalArea = expenses.reduce((sum, e) => {
+      const a = parseFloat(e.area_acres) || 0;
+      return a > 0 ? sum + a : sum;
+    }, 0);
+    const costPerAcre = totalArea > 0 ? total / totalArea : null;
     const catSum = expenses.reduce((acc, e) => {
       acc[e.category] = (acc[e.category] || 0) + e.amount;
       return acc;
@@ -32,6 +40,7 @@ const Expenses = ({ expenses, farms, categories, user }) => {
     return {
       total,
       count,
+      costPerAcre,
       topCategory: topCategory ? topCategory[0] : '—',
       topCategoryAmount: topCategory ? topCategory[1] : 0
     };
@@ -50,6 +59,22 @@ const Expenses = ({ expenses, farms, categories, user }) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handlePlotChange = (e) => {
+    const plotId = e.target.value;
+    const plot = farmPlots.find(p => p.id === parseInt(plotId));
+    setFormData(prev => ({ ...prev, plot_id: plotId, area_acres: plot?.area_acres?.toString() || '' }));
+  };
+
+  const handleCropCycleChange = (e) => {
+    const cycleId = e.target.value;
+    const cycle = cropCycles.find(c => c.id === parseInt(cycleId));
+    setFormData(prev => ({ 
+      ...prev, 
+      crop_cycle_id: cycleId, 
+      area_acres: cycle?.area_acres?.toString() || prev.area_acres 
+    }));
+  };
+
   const handleEdit = (e) => {
     setEditingId(e.id);
     const isKnownCategory = categories.some(c => c.name === e.category);
@@ -60,7 +85,10 @@ const Expenses = ({ expenses, farms, categories, user }) => {
       category: isKnownCategory ? e.category : 'ADD_NEW',
       description: e.description || '',
       party: e.party || '',
-      amount: e.amount.toString()
+      amount: e.amount.toString(),
+      plot_id: e.plot_id?.toString() || '',
+      crop_cycle_id: e.crop_cycle_id?.toString() || '',
+      area_acres: e.area_acres?.toString() || ''
     });
     
     if (!isKnownCategory) {
@@ -99,7 +127,10 @@ const Expenses = ({ expenses, farms, categories, user }) => {
             ...formData,
             category: finalCategory,
             amount: parseFloat(formData.amount),
-            farm_id: parseInt(formData.farm_id)
+            farm_id: parseInt(formData.farm_id),
+            plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
+            crop_cycle_id: formData.crop_cycle_id ? parseInt(formData.crop_cycle_id) : null,
+            area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null
           })
           .eq('id', editingId);
         if (error) throw error;
@@ -108,7 +139,10 @@ const Expenses = ({ expenses, farms, categories, user }) => {
           ...formData,
           category: finalCategory,
           amount: parseFloat(formData.amount),
-          farm_id: parseInt(formData.farm_id)
+          farm_id: parseInt(formData.farm_id),
+          plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
+          crop_cycle_id: formData.crop_cycle_id ? parseInt(formData.crop_cycle_id) : null,
+          area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null
         }]);
         if (error) throw error;
       }
@@ -122,7 +156,10 @@ const Expenses = ({ expenses, farms, categories, user }) => {
         category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
         description: '',
         party: '',
-        amount: ''
+        amount: '',
+        plot_id: '',
+        crop_cycle_id: '',
+        area_acres: ''
       });
     } catch (error) {
       console.error('Error saving expense:', error);
@@ -153,7 +190,10 @@ const Expenses = ({ expenses, farms, categories, user }) => {
       category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
       description: '',
       party: '',
-      amount: ''
+      amount: '',
+      plot_id: '',
+      crop_cycle_id: '',
+      area_acres: ''
     });
     setIsModalOpen(true);
   };
@@ -171,7 +211,7 @@ const Expenses = ({ expenses, farms, categories, user }) => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="agri-card p-5 border-l-4 border-expense">
           <div className="flex justify-between items-start mb-2">
             <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Total Expenses</span>
@@ -185,6 +225,13 @@ const Expenses = ({ expenses, farms, categories, user }) => {
             <IconFilter size={20} className="text-accent-blue" />
           </div>
           <span className="text-lg font-bold text-text-primary">{stats.count} Records</span>
+        </div>
+        <div className="agri-card p-5 border-l-4 border-accent-amber">
+          <div className="flex justify-between items-start mb-2">
+            <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Cost/Acre</span>
+            <IconReceipt2 size={20} className="text-accent-amber" />
+          </div>
+          <span className="text-lg font-bold text-text-primary">{stats.costPerAcre ? formatPKR(stats.costPerAcre) : '—'}</span>
         </div>
         <div className="agri-card p-5 border-l-4 border-accent-amber">
           <div className="flex justify-between items-start mb-2">
@@ -222,6 +269,7 @@ const Expenses = ({ expenses, farms, categories, user }) => {
                 <th className="px-6 py-3">Description</th>
                 <th className="px-6 py-3">Party</th>
                 <th className="px-6 py-3 text-right">Amount</th>
+                <th className="px-6 py-3 text-right">₨/Acre</th>
                 <th className="px-6 py-3 text-center">Action</th>
               </tr>
             </thead>
@@ -239,6 +287,9 @@ const Expenses = ({ expenses, farms, categories, user }) => {
                       <td className="px-6 py-4 text-text-secondary text-[13px]">{e.description}</td>
                       <td className="px-6 py-4 font-bold">{e.party}</td>
                       <td className="px-6 py-4 text-right font-pkr text-expense">{formatPKR(e.amount)}</td>
+                      <td className="px-6 py-4 text-right font-pkr text-text-secondary">
+                        {e.area_acres ? formatPKR(e.amount / e.area_acres) : '—'}
+                      </td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex justify-center gap-1">
                           <button 
@@ -262,7 +313,7 @@ const Expenses = ({ expenses, farms, categories, user }) => {
                 })
               ) : (
                 <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center">
+                  <td colSpan="8" className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center opacity-40">
                       <IconReceipt2 size={48} className="mb-2" />
                       <p className="text-sm font-bold">No expense records found yet.</p>
@@ -307,6 +358,31 @@ const Expenses = ({ expenses, farms, categories, user }) => {
                 required
                 className="agri-input"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-text-muted uppercase">Plot</label>
+              <select name="plot_id" value={formData.plot_id} onChange={handlePlotChange} className="agri-input">
+                <option value="">— None —</option>
+                {farmPlots.filter(p => p.farm_id === parseInt(formData.farm_id)).map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.area_acres} ac)</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-text-muted uppercase">Crop Cycle</label>
+              <select name="crop_cycle_id" value={formData.crop_cycle_id} onChange={handleCropCycleChange} className="agri-input">
+                <option value="">— None —</option>
+                {cropCycles.filter(c => c.farm_id === parseInt(formData.farm_id) && (!formData.plot_id || c.plot_id === parseInt(formData.plot_id))).map(c => (
+                  <option key={c.id} value={c.id}>{c.crop} ({c.area_acres || '?'} ac)</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-text-muted uppercase">Area (Acres)</label>
+              <input type="number" name="area_acres" value={formData.area_acres} onChange={handleInputChange} step="0.01" placeholder="Auto" className="agri-input" />
             </div>
           </div>
 

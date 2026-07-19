@@ -1,12 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { IconPlus, IconBuildingCommunity, IconMapPin, IconMaximize, IconUser, IconTrash, IconEdit } from '@tabler/icons-react';
+import { useNavigate } from 'react-router-dom';
+import { IconPlus, IconBuildingCommunity, IconMapPin, IconMaximize, IconUser, IconTrash, IconEdit, IconMap, IconLayersIntersect } from '@tabler/icons-react';
 import { formatPKR } from '../../utils/format';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
-const Farms = ({ farms, currentOrg }) => {
+const Farms = ({ farms, currentOrg, farmPlots = [] }) => {
+  const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingFarm, setEditingFarm] = useState(null);
@@ -14,6 +16,7 @@ const Farms = ({ farms, currentOrg }) => {
     name: '',
     location: '',
     area: '',
+    area_acres: '',
     ownership: 'Owned',
     land_value: '',
     status: 'Active'
@@ -21,11 +24,13 @@ const Farms = ({ farms, currentOrg }) => {
 
   const stats = useMemo(() => {
     const totalArea = farms.length;
+    const totalAcres = farms.reduce((sum, f) => sum + (parseFloat(f.area_acres) || 0), 0);
     const totalValue = farms.reduce((sum, f) => sum + (parseFloat(f.land_value) || 0), 0);
     const activeFarms = farms.filter(f => f.status === 'Active').length;
     
     return {
       totalArea,
+      totalAcres,
       totalValue,
       activeFarms
     };
@@ -42,6 +47,7 @@ const Farms = ({ farms, currentOrg }) => {
       name: farm.name,
       location: farm.location,
       area: farm.area,
+      area_acres: farm.area_acres || '',
       ownership: farm.ownership,
       land_value: farm.land_value,
       status: farm.status
@@ -58,6 +64,7 @@ const Farms = ({ farms, currentOrg }) => {
           .from('farms')
           .update({
             ...formData,
+            area_acres: parseFloat(formData.area_acres) || null,
             land_value: parseFloat(formData.land_value) || 0
           })
           .eq('id', editingFarm.id);
@@ -66,6 +73,7 @@ const Farms = ({ farms, currentOrg }) => {
         const { error } = await supabase.from('farms').insert([{
           ...formData,
           org_id: currentOrg?.id,
+          area_acres: parseFloat(formData.area_acres) || null,
           land_value: parseFloat(formData.land_value) || 0
         }]);
         if (error) throw error;
@@ -77,6 +85,7 @@ const Farms = ({ farms, currentOrg }) => {
         name: '',
         location: '',
         area: '',
+        area_acres: '',
         ownership: 'Owned',
         land_value: '',
         status: 'Active'
@@ -114,6 +123,7 @@ const Farms = ({ farms, currentOrg }) => {
       name: '',
       location: '',
       area: '',
+      area_acres: '',
       ownership: 'Owned',
       land_value: '',
       status: 'Active'
@@ -134,13 +144,20 @@ const Farms = ({ farms, currentOrg }) => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="agri-card p-5 border-l-4 border-primary">
           <div className="flex justify-between items-start mb-2">
             <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Total Farms</span>
             <IconBuildingCommunity size={20} className="text-primary" />
           </div>
           <span className="text-lg font-bold text-text-primary">{stats.totalArea} Units</span>
+        </div>
+        <div className="agri-card p-5 border-l-4 border-accent-green">
+          <div className="flex justify-between items-start mb-2">
+            <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Total Acres</span>
+            <IconLayersIntersect size={20} className="text-accent-green" />
+          </div>
+          <span className="text-lg font-bold text-text-primary">{stats.totalAcres.toFixed(2)} Acres</span>
         </div>
         <div className="agri-card p-5 border-l-4 border-revenue">
           <div className="flex justify-between items-start mb-2">
@@ -173,6 +190,13 @@ const Farms = ({ farms, currentOrg }) => {
                   </div>
                   <div className="flex gap-2">
                     <button 
+                      onClick={() => navigate(`/farm-map/${farm.id}`)}
+                      className="text-text-muted hover:text-accent-blue transition-colors"
+                      title="View Farm Map"
+                    >
+                      <IconMap size={18} />
+                    </button>
+                    <button 
                       onClick={() => handleEdit(farm)}
                       className="text-text-muted hover:text-primary transition-colors"
                     >
@@ -190,8 +214,14 @@ const Farms = ({ farms, currentOrg }) => {
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 text-sm">
                     <IconMaximize size={16} className="text-text-muted" />
-                    <span className="text-text-secondary">Area: <span className="text-text-primary font-medium">{farm.area}</span></span>
+                    <span className="text-text-secondary">Area: <span className="text-text-primary font-medium">{farm.area_acres ? `${farm.area_acres} Acres` : farm.area}</span></span>
                   </div>
+                  {farmPlots.filter(p => p.farm_id === farm.id).length > 0 && (
+                    <div className="flex items-center gap-3 text-sm">
+                      <IconLayersIntersect size={16} className="text-text-muted" />
+                      <span className="text-text-secondary">Plots: <span className="text-text-primary font-medium">{farmPlots.filter(p => p.farm_id === farm.id).length}</span></span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-3 text-sm">
                     <IconUser size={16} className="text-text-muted" />
                     <span className="text-text-secondary">Ownership: <span className="text-text-primary font-medium">{farm.ownership}</span></span>
@@ -247,14 +277,15 @@ const Farms = ({ farms, currentOrg }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
-              <label className="agri-label">Area (Acres/Kanals)</label>
+              <label className="agri-label">Area (Acres)</label>
               <input
-                type="text"
-                name="area"
-                value={formData.area}
+                type="number"
+                step="0.01"
+                name="area_acres"
+                value={formData.area_acres}
                 onChange={handleInputChange}
                 required
-                placeholder="e.g. 12 Acres"
+                placeholder="e.g. 12"
                 className="agri-input"
               />
             </div>

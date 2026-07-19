@@ -17,6 +17,7 @@ import Livestock from './components/modules/Livestock';
 import CropCycles from './components/modules/CropCycles';
 import Irrigation from './components/modules/Irrigation';
 import Farms from './components/modules/Farms';
+import FarmMap from './components/modules/FarmMap';
 import SprayLog from './components/modules/SprayLog';
 import MandiPrices from './components/modules/MandiPrices';
 import VendorsBuyers from './components/modules/VendorsBuyers';
@@ -82,6 +83,7 @@ function App() {
     loans = [], 
     attendance = [], 
     cropCycles = [], 
+    farmPlots = [],
     mandiPrices = [], 
     irrigationLog = [], 
     sprayLog = [], 
@@ -143,6 +145,7 @@ function App() {
     const filteredLoans = applyFilters(loans);
     const filteredAttendance = applyFilters(attendance);
     const filteredCropCycles = applyFilters(cropCycles);
+    const filteredFarmPlots = filteredData(farmPlots);
     const filteredIrrigationLog = applyFilters(irrigationLog);
     const filteredSprayLog = applyFilters(sprayLog);
     const filteredMandiPrices = applyFilters(mandiPrices);
@@ -207,6 +210,8 @@ function App() {
                     revenue={filteredRevenue}
                     expenses={filteredExpenses}
                     farms={farms}
+                    farmPlots={filteredFarmPlots}
+                    cropCycles={filteredCropCycles}
                     workers={filteredWorkers}
                     machinery={filteredMachinery}
                     livestock={filteredLivestock}
@@ -220,12 +225,17 @@ function App() {
                   <Revenue 
                     revenue={filteredRevenue} 
                     farms={farms} 
+                    farmPlots={filteredFarmPlots}
+                    cropCycles={filteredCropCycles}
                     categories={categories.filter(c => c.module === 'revenue')} 
                     user={session.user}
                   />
                 } />
                 <Route path="/farms" element={
-                  <Farms farms={farms} currentOrg={currentOrg} />
+                  <Farms farms={farms} currentOrg={currentOrg} farmPlots={filteredFarmPlots} />
+                } />
+                <Route path="/farm-map/:farmId" element={
+                  <FarmMap farms={farms} farmPlots={filteredFarmPlots} cropCycles={filteredCropCycles} expenses={filteredExpenses} revenue={filteredRevenue} />
                 } />
                 <Route path="/billing" element={
                   <Billing currentOrg={currentOrg} refetch={refetch} />
@@ -243,6 +253,8 @@ function App() {
                   <Expenses 
                     expenses={filteredExpenses} 
                     farms={farms} 
+                    farmPlots={filteredFarmPlots}
+                    cropCycles={filteredCropCycles}
                     categories={categories.filter(c => c.module === 'expense')} 
                     user={session.user}
                   />
@@ -254,13 +266,13 @@ function App() {
                   <Loans loans={filteredLoans} farms={farms} />
                 } />
                 <Route path="/crop-cycles" element={
-                  <CropCycles cropCycles={filteredCropCycles} farms={farms} />
+                  <CropCycles cropCycles={filteredCropCycles} farms={farms} farmPlots={filteredFarmPlots} />
                 } />
                 <Route path="/irrigation" element={
-                  <Irrigation irrigationLog={filteredIrrigationLog} farms={farms} />
+                  <Irrigation irrigationLog={filteredIrrigationLog} farms={farms} farmPlots={filteredFarmPlots} cropCycles={filteredCropCycles} />
                 } />
                 <Route path="/spray" element={
-                  <SprayLog sprayLog={filteredSprayLog} farms={farms} />
+                  <SprayLog sprayLog={filteredSprayLog} farms={farms} farmPlots={filteredFarmPlots} cropCycles={filteredCropCycles} />
                 } />
                 <Route path="/mandi" element={
                   <MandiPrices mandiPrices={filteredMandiPrices} />
@@ -281,6 +293,8 @@ function App() {
                     machinery={filteredMachinery} 
                     machineUsage={filteredMachineUsage} 
                     farms={farms} 
+                    farmPlots={filteredFarmPlots}
+                    cropCycles={filteredCropCycles}
                     categories={categories.filter(c => c.module === 'machinery')} 
                     user={session.user}
                   />

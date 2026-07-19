@@ -6,7 +6,7 @@ import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
-const SprayLog = ({ sprayLog = [], farms = [] }) => {
+const SprayLog = ({ sprayLog = [], farms = [], farmPlots = [], cropCycles = [] }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -15,14 +15,35 @@ const SprayLog = ({ sprayLog = [], farms = [] }) => {
     field: '',
     chemical: '',
     qty: '',
+    qty_value: '',
+    qty_unit: 'Litres',
     crop: '',
     purpose: 'Pesticide',
-    cost: ''
+    cost: '',
+    plot_id: '',
+    crop_cycle_id: '',
+    area_acres: ''
   });
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handlePlotChange = (e) => {
+    const plotId = e.target.value;
+    const plot = farmPlots.find(p => p.id === parseInt(plotId));
+    setFormData(prev => ({ ...prev, plot_id: plotId, area_acres: plot?.area_acres?.toString() || '' }));
+  };
+
+  const handleCropCycleChange = (e) => {
+    const cycleId = e.target.value;
+    const cycle = cropCycles.find(c => c.id === parseInt(cycleId));
+    setFormData(prev => ({ 
+      ...prev, 
+      crop_cycle_id: cycleId, 
+      area_acres: cycle?.area_acres?.toString() || prev.area_acres 
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -32,7 +53,12 @@ const SprayLog = ({ sprayLog = [], farms = [] }) => {
       const { error } = await supabase.from('spray_log').insert([{
         ...formData,
         farm_id: parseInt(formData.farm_id),
-        cost: parseFloat(formData.cost) || 0
+        cost: parseFloat(formData.cost) || 0,
+        plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
+        crop_cycle_id: formData.crop_cycle_id ? parseInt(formData.crop_cycle_id) : null,
+        area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
+        qty_value: formData.qty_value ? parseFloat(formData.qty_value) : null,
+        qty_unit: formData.qty_unit || null
       }]);
       
       if (error) throw error;
@@ -44,9 +70,14 @@ const SprayLog = ({ sprayLog = [], farms = [] }) => {
         field: '',
         chemical: '',
         qty: '',
+        qty_value: '',
+        qty_unit: 'Litres',
         crop: '',
         purpose: 'Pesticide',
-        cost: ''
+        cost: '',
+        plot_id: '',
+        crop_cycle_id: '',
+        area_acres: ''
       });
     } catch (error) {
       console.error('Error adding spray log:', error);
@@ -70,7 +101,12 @@ const SprayLog = ({ sprayLog = [], farms = [] }) => {
   const stats = useMemo(() => {
     const totalCost = sprayLog.reduce((sum, l) => sum + (Number(l.cost) || 0), 0);
     const sprayCount = sprayLog.length;
-    return { totalCost, sprayCount };
+    const totalArea = sprayLog.reduce((sum, l) => {
+      const a = parseFloat(l.area_acres) || 0;
+      return a > 0 ? sum + a : sum;
+    }, 0);
+    const costPerAcre = totalArea > 0 ? totalCost / totalArea : null;
+    return { totalCost, sprayCount, costPerAcre };
   }, [sprayLog]);
 
   return (
@@ -86,7 +122,7 @@ const SprayLog = ({ sprayLog = [], farms = [] }) => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="agri-card p-5 border-l-4 border-accent-amber">
           <div className="flex justify-between items-start mb-2">
             <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Total Applications</span>
@@ -101,6 +137,13 @@ const SprayLog = ({ sprayLog = [], farms = [] }) => {
           </div>
           <span className="text-lg font-bold text-text-primary">{formatPKR(stats.totalCost)}</span>
         </div>
+        <div className="agri-card p-5 border-l-4 border-accent-blue">
+          <div className="flex justify-between items-start mb-2">
+            <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Cost/Acre</span>
+            <IconReceipt size={20} className="text-accent-blue" />
+          </div>
+          <span className="text-lg font-bold text-text-primary">{stats.costPerAcre ? formatPKR(stats.costPerAcre) : '—'}</span>
+        </div>
       </div>
 
       <div className="agri-card overflow-hidden">
@@ -114,6 +157,7 @@ const SprayLog = ({ sprayLog = [], farms = [] }) => {
                 <th className="px-6 py-3">Chemical/Purpose</th>
                 <th className="px-6 py-3">Quantity</th>
                 <th className="px-6 py-3 text-right">Cost</th>
+                <th className="px-6 py-3 text-right">₨/Acre</th>
                 <th className="px-6 py-3 text-center">Action</th>
               </tr>
             </thead>
@@ -125,7 +169,7 @@ const SprayLog = ({ sprayLog = [], farms = [] }) => {
                     <tr key={log.id} className="agri-table-row">
                       <td className="px-6 py-4 whitespace-nowrap">{formatDate(log.date)}</td>
                       <td className="px-6 py-4">
-                        <Badge variant="outline">{farm?.name || 'Unknown'}</Badge>
+                        <Badge variant="primary">{farm?.name || 'Unknown'}</Badge>
                         <div className="text-xs text-text-muted mt-1">{log.field}</div>
                       </td>
                       <td className="px-6 py-4 font-bold text-text-primary">{log.crop}</td>
@@ -133,8 +177,13 @@ const SprayLog = ({ sprayLog = [], farms = [] }) => {
                         <div className="font-medium text-text-primary">{log.chemical}</div>
                         <div className="text-[10px] uppercase font-bold text-accent-blue">{log.purpose}</div>
                       </td>
-                      <td className="px-6 py-4">{log.qty}</td>
+                      <td className="px-6 py-4">
+                        {log.qty_value ? `${log.qty_value} ${log.qty_unit || ''}` : log.qty}
+                      </td>
                       <td className="px-6 py-4 text-right font-pkr text-expense">{formatPKR(log.cost)}</td>
+                      <td className="px-6 py-4 text-right font-pkr text-text-secondary">
+                        {log.area_acres ? formatPKR(log.cost / log.area_acres) : '—'}
+                      </td>
                       <td className="px-6 py-4 text-center">
                         <button 
                           onClick={() => handleDelete(log.id)}
@@ -149,7 +198,7 @@ const SprayLog = ({ sprayLog = [], farms = [] }) => {
                 })
               ) : (
                 <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center">
+                  <td colSpan="8" className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center opacity-40">
                       <IconFlask size={48} className="mb-2" />
                       <p className="text-sm font-bold">No spray records found.</p>
@@ -193,6 +242,31 @@ const SprayLog = ({ sprayLog = [], farms = [] }) => {
                 required
                 className="agri-input"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="agri-label">Plot</label>
+              <select name="plot_id" value={formData.plot_id} onChange={handlePlotChange} className="agri-input">
+                <option value="">— None —</option>
+                {farmPlots.filter(p => p.farm_id === parseInt(formData.farm_id)).map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.area_acres} ac)</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="agri-label">Crop Cycle</label>
+              <select name="crop_cycle_id" value={formData.crop_cycle_id} onChange={handleCropCycleChange} className="agri-input">
+                <option value="">— None —</option>
+                {cropCycles.filter(c => c.farm_id === parseInt(formData.farm_id) && (!formData.plot_id || c.plot_id === parseInt(formData.plot_id))).map(c => (
+                  <option key={c.id} value={c.id}>{c.crop} ({c.area_acres || '?'} ac)</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="agri-label">Area (Acres)</label>
+              <input type="number" name="area_acres" value={formData.area_acres} onChange={handleInputChange} step="0.01" placeholder="Auto" className="agri-input" />
             </div>
           </div>
 
@@ -254,14 +328,23 @@ const SprayLog = ({ sprayLog = [], farms = [] }) => {
             </div>
             <div className="flex flex-col gap-1">
               <label className="agri-label">Quantity</label>
-              <input
-                type="text"
-                name="qty"
-                value={formData.qty}
-                onChange={handleInputChange}
-                placeholder="e.g. 500ml/acre"
-                className="agri-input"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  name="qty_value"
+                  value={formData.qty_value}
+                  onChange={handleInputChange}
+                  step="0.01"
+                  placeholder="0.00"
+                  className="agri-input flex-1"
+                />
+                <select name="qty_unit" value={formData.qty_unit} onChange={handleInputChange} className="agri-input w-24">
+                  <option value="Litres">Litres</option>
+                  <option value="Kg">Kg</option>
+                  <option value="ml">ml</option>
+                  <option value="grams">grams</option>
+                </select>
+              </div>
             </div>
             <div className="flex flex-col gap-1">
               <label className="agri-label">Total Cost (PKR)</label>
