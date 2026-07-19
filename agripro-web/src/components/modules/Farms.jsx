@@ -25,7 +25,7 @@ const Farms = ({ farms, currentOrg, farmPlots = [] }) => {
   const stats = useMemo(() => {
     const totalArea = farms.length;
     const totalAcres = farms.reduce((sum, f) => sum + (parseFloat(f.area_acres) || 0), 0);
-    const totalValue = farms.reduce((sum, f) => sum + (parseFloat(f.land_value) || 0), 0);
+    const totalValue = farms.reduce((sum, f) => sum + ((parseFloat(f.area_acres) || 0) * (parseFloat(f.land_value) || 0)), 0);
     const activeFarms = farms.filter(f => f.status === 'Active').length;
     
     return {
@@ -63,17 +63,21 @@ const Farms = ({ farms, currentOrg, farmPlots = [] }) => {
         const { error } = await supabase
           .from('farms')
           .update({
-            ...formData,
-            area_acres: parseFloat(formData.area_acres) || null,
+            name: formData.name,
+            location: formData.location,
+            ownership: formData.ownership,
+            status: formData.status,
             land_value: parseFloat(formData.land_value) || 0
           })
           .eq('id', editingFarm.id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from('farms').insert([{
-          ...formData,
+          name: formData.name,
+          location: formData.location,
+          ownership: formData.ownership,
+          status: formData.status,
           org_id: currentOrg?.id,
-          area_acres: parseFloat(formData.area_acres) || null,
           land_value: parseFloat(formData.land_value) || 0
         }]);
         if (error) throw error;
@@ -228,7 +232,7 @@ const Farms = ({ farms, currentOrg, farmPlots = [] }) => {
                   </div>
                   <div className="mt-4 pt-4 border-t border-border-light">
                     <span className="text-[10px] font-bold text-text-muted uppercase block mb-1">Estimated Value</span>
-                    <span className="text-lg font-bold text-primary font-pkr">{formatPKR(farm.land_value)}</span>
+                    <span className="text-lg font-bold text-primary font-pkr">{formatPKR((parseFloat(farm.area_acres) || 0) * (parseFloat(farm.land_value) || 0))}</span>
                   </div>
                 </div>
               </div>
@@ -276,19 +280,22 @@ const Farms = ({ farms, currentOrg, farmPlots = [] }) => {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1">
-              <label className="agri-label">Area (Acres)</label>
-              <input
-                type="number"
-                step="0.01"
-                name="area_acres"
-                value={formData.area_acres}
-                onChange={handleInputChange}
-                required
-                placeholder="e.g. 12"
-                className="agri-input"
-              />
+            <div className="flex flex-col gap-1 col-span-2">
+              {editingFarm ? (
+                <>
+                  <label className="agri-label">Area (Acres)</label>
+                  <div className="agri-input bg-bg-alt text-text-muted flex items-center h-10 border border-border rounded-md px-3">
+                    {formData.area_acres ? `${parseFloat(formData.area_acres).toFixed(2)} Acres (Calculated from Map)` : 'Draw boundary on map to calculate area'}
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-text-muted italic bg-bg-alt p-3 rounded-lg border border-border">
+                  <IconLayersIntersect size={16} className="inline mr-1 text-primary"/>
+                  Note: Farm area will be automatically calculated when you draw the boundary on the map.
+                </div>
+              )}
             </div>
+            
             <div className="flex flex-col gap-1">
               <label className="agri-label">Ownership</label>
               <select
@@ -307,7 +314,7 @@ const Farms = ({ farms, currentOrg, farmPlots = [] }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
-              <label className="agri-label">Land Value (PKR)</label>
+              <label className="agri-label">Avg Land Value / Acre</label>
               <input
                 type="number"
                 name="land_value"
