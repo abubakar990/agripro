@@ -271,3 +271,53 @@ export const TILE_LAYERS = {
     name: 'Street'
   }
 };
+
+/**
+ * Rotates a Polygon GeoJSON by 90 degrees clockwise around its center
+ */
+export const rotatePolygon90Degrees = (geoJSON) => {
+  if (!geoJSON || geoJSON.type !== 'Polygon') return geoJSON;
+  
+  const feature = turf.feature(geoJSON);
+  const [minLng, minLat, maxLng, maxLat] = bbox(feature);
+  
+  const centerLng = (minLng + maxLng) / 2;
+  const centerLat = (minLat + maxLat) / 2;
+  const aspect = Math.cos(centerLat * Math.PI / 180);
+  
+  const newCoordinates = geoJSON.coordinates.map(ring => 
+    ring.map(coord => {
+      const lng = coord[0];
+      const lat = coord[1];
+      
+      const dx = (lng - centerLng) * aspect;
+      const dy = (lat - centerLat);
+      
+      const newLng = centerLng + (dy / aspect);
+      const newLat = centerLat - dx;
+      
+      return [newLng, newLat];
+    })
+  );
+  
+  return {
+    ...geoJSON,
+    coordinates: newCoordinates
+  };
+};
+
+/**
+ * Calculates the overlap area (in sq meters) between two GeoJSON geometries
+ */
+export const getOverlapArea = (geoJSON1, geoJSON2) => {
+  try {
+    const f1 = turf.feature(geoJSON1);
+    const f2 = turf.feature(geoJSON2);
+    if (!booleanIntersects(f1, f2)) return 0;
+    const intersection = intersect(turf.featureCollection([f1, f2]));
+    if (!intersection) return 0;
+    return area(intersection);
+  } catch (e) {
+    return 0;
+  }
+};

@@ -4,13 +4,13 @@ import L from 'leaflet';
 import '@geoman-io/leaflet-geoman-free';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { calculateAcresFromLatLngs, layerToGeoJSON, geoJSONToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM, TILE_LAYERS, createIntersectedAcreBox, addPolygonToFeatureCollection, autoGeneratePlotsForBoundary, autoAdjustPlotsToBoundary } from '../../utils/geoUtils';
+import { calculateAcresFromLatLngs, layerToGeoJSON, geoJSONToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM, TILE_LAYERS, createIntersectedAcreBox, addPolygonToFeatureCollection, autoGeneratePlotsForBoundary, autoAdjustPlotsToBoundary, rotatePolygon90Degrees, getOverlapArea } from '../../utils/geoUtils';
 import { getPlotScore, getScoreColor, getScoreLabel } from '../../utils/perAcreCalc';
 import { formatPKR } from '../../utils/format';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
-import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity } from '@tabler/icons-react';
+import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconHandGrab } from '@tabler/icons-react';
 
 const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, onPlotRedrawn, mapRef }) => {
   const map = useMap();
@@ -169,6 +169,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   
   // Geoman Vertex Adjustment States
   const [adjustingPlotId, setAdjustingPlotId] = useState(null);
+  const [draggingPlotId, setDraggingPlotId] = useState(null);
   const [adjustingFarmBoundary, setAdjustingFarmBoundary] = useState(false);
   const [dynamicAreaAcres, setDynamicAreaAcres] = useState(null);
   
@@ -239,6 +240,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
         layer.pm.disable();
         layer.off('pm:markerdrag');
         layer.off('pm:edit');
+        layer.off('pm:dragend');
       }
     });
 
@@ -256,10 +258,66 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
         layer.on('pm:edit', updateArea);
         updateArea();
       }
+    } else if (draggingPlotId && plotLayersRef.current[draggingPlotId]) {
+      const layer = plotLayersRef.current[draggingPlotId];
+      if (layer && layer.pm) {
+        layer.pm.enableLayerDrag();
+        
+        const handleDragEnd = async (e) => {
+          const draggedLayer = e.layer;
+          const draggedGeoJSON = layerToGeoJSON(draggedLayer);
+          
+          let maxOverlapArea = 0;
+          let targetPlotId = null;
+          let targetPlotGeoJSON = null;
+          
+          plots.forEach(p => {
+             if (p.id !== draggingPlotId && p.boundary) {
+               const overlap = getOverlapArea(draggedGeoJSON, p.boundary);
+               if (overlap > maxOverlapArea && overlap > 0) {
+                 maxOverlapArea = overlap;
+                 targetPlotId = p.id;
+                 targetPlotGeoJSON = p.boundary;
+               }
+             }
+          });
+          
+          if (targetPlotId && maxOverlapArea > 50) { // arbitrary threshold > 50 sqm
+            const confirmSwap = window.confirm('Swap these two plots?');
+            if (confirmSwap) {
+               try {
+                 const plotA_oldBoundary = plots.find(p => p.id === draggingPlotId).boundary;
+                 const plotB_oldBoundary = targetPlotGeoJSON;
+                 
+                 await Promise.all([
+                   supabase.from('farm_plots').update({ boundary: plotB_oldBoundary }).eq('id', draggingPlotId),
+                   supabase.from('farm_plots').update({ boundary: plotA_oldBoundary }).eq('id', targetPlotId)
+                 ]);
+               } catch (err) {
+                 alert('Error swapping plots: ' + err.message);
+               }
+            } else {
+               // Revert by disabling drag and triggering re-render
+               setDraggingPlotId(null);
+            }
+          } else {
+             try {
+                const newAcres = calculateAcresFromLatLngs(draggedLayer.getLatLngs()[0]);
+                await supabase.from('farm_plots').update({ boundary: draggedGeoJSON, area_acres: newAcres }).eq('id', draggingPlotId);
+             } catch(err) {
+                alert('Error moving plot: ' + err.message);
+             }
+          }
+          setDraggingPlotId(null);
+          layer.pm.disableLayerDrag();
+        };
+        
+        layer.on('pm:dragend', handleDragEnd);
+      }
     } else if (!adjustingFarmBoundary) {
       setDynamicAreaAcres(null);
     }
-  }, [adjustingPlotId, plots, adjustingFarmBoundary]);
+  }, [adjustingPlotId, draggingPlotId, plots, adjustingFarmBoundary]);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -480,7 +538,19 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       setAdjustingPlotId(null);
       alert('Plot adjustments saved!');
     } catch (err) {
-      alert('Error saving adjustments: ' + err.message);
+      alert('Error saving boundary: ' + err.message);
+    }
+  };
+
+  const handleRotatePlot = async (plotId) => {
+    const plot = plots.find(p => p.id === plotId);
+    if (!plot || !plot.boundary) return;
+    
+    try {
+      const rotatedGeoJSON = rotatePolygon90Degrees(plot.boundary);
+      await supabase.from('farm_plots').update({ boundary: rotatedGeoJSON }).eq('id', plotId);
+    } catch (err) {
+      alert('Error rotating plot: ' + err.message);
     }
   };
 
@@ -931,6 +1001,28 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                                 </div>
                                 
                                 <div className="flex gap-2 justify-end mt-2">
+                                  <button 
+                                    className="text-slate-400 hover:text-emerald-400 p-1.5 hover:bg-slate-800 rounded transition-colors" 
+                                    onClick={(e) => { e.stopPropagation(); handleRotatePlot(plot.id); }}
+                                    title="Rotate 90° (Horizontal/Vertical)"
+                                  >
+                                    <IconRotate size={16} />
+                                  </button>
+                                  <button 
+                                    className={`p-1.5 rounded transition-colors ${draggingPlotId === plot.id ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800'}`} 
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      if (draggingPlotId === plot.id) {
+                                        setDraggingPlotId(null);
+                                      } else {
+                                        setDraggingPlotId(plot.id); 
+                                        alert('Drag mode enabled! Drag the plot on the map to move it, or drop it onto another plot to swap their positions.');
+                                      }
+                                    }}
+                                    title={draggingPlotId === plot.id ? "Cancel drag" : "Drag to move or swap"}
+                                  >
+                                    <IconHandGrab size={16} />
+                                  </button>
                                   <button 
                                     className="text-slate-400 hover:text-emerald-400 p-1.5 hover:bg-slate-800 rounded transition-colors" 
                                     onClick={(e) => { e.stopPropagation(); startRedrawPlot(plot.id); }}
