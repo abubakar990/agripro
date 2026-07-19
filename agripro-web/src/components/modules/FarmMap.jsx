@@ -344,6 +344,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     try {
       const { error } = await supabase.from('farms').update({
         boundary: null,
+        area_acres: null,
       }).eq('id', numericFarmId);
       if (error) throw error;
       alert('Farm boundary deleted.');
