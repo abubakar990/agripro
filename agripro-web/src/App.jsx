@@ -236,7 +236,7 @@ function App() {
                   <Farms farms={farms} currentOrg={currentOrg} farmPlots={filteredFarmPlots} />
                 } />
                 <Route path="/farm-map/:farmId" element={
-                  <FarmMap farms={farms} farmPlots={filteredFarmPlots} cropCycles={filteredCropCycles} expenses={filteredExpenses} revenue={filteredRevenue} acrePresets={acrePresets} />
+                  <FarmMap farms={farms} farmPlots={filteredFarmPlots} cropCycles={filteredCropCycles} expenses={filteredExpenses} revenue={filteredRevenue} acrePresets={acrePresets} refetch={refetch} />
                 } />
                 <Route path="/billing" element={
                   <Billing currentOrg={currentOrg} refetch={refetch} />

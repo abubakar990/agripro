@@ -172,7 +172,7 @@ const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCre
   return null;
 };
 
-const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], revenue = [], acrePresets = [] }) => {
+const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], revenue = [], acrePresets = [], refetch }) => {
   const { farmId } = useParams();
   const navigate = useNavigate();
   const mapRef = useRef(null);
@@ -537,6 +537,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     try {
       const rotatedGeoJSON = rotatePolygon(plot.boundary, angle);
       await supabase.from('farm_plots').update({ boundary: rotatedGeoJSON }).eq('id', plotId);
+      if (refetch) refetch();
     } catch (err) {
       alert('Error rotating plot: ' + err.message);
     }
@@ -591,11 +592,12 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       if (newPlots.length > 0) {
          await supabase.from('farm_plots').delete().eq('id', cutPlot.id);
          await supabase.from('farm_plots').insert(newPlots);
+         if (refetch) refetch();
       }
     } catch(err) {
       alert("Error splitting plot: " + err.message);
     }
-  }, [plots, numericFarmId]);
+  }, [plots, numericFarmId, refetch]);
 
   const handleMergeSelectedPlots = async () => {
     if (selectedPlotIdsForMerge.length < 2) return;
@@ -619,6 +621,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
        
        await supabase.from('farm_plots').delete().in('id', selectedPlotIdsForMerge);
        await supabase.from('farm_plots').insert([newPlot]);
+       if (refetch) refetch();
        
        setSelectedPlotIdsForMerge([]);
        setIsDrawMode(null);
@@ -664,6 +667,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       const { error } = await supabase.from('farm_plots').insert(plotsToInsert);
       if (error) throw error;
       
+      if (refetch) refetch();
       alert(`Successfully generated ${plotsToInsert.length} plots! The map will now refresh.`);
       setTimeout(() => {
         setIsDrawMode(null);
@@ -678,6 +682,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     try {
       const { error } = await supabase.from('farm_plots').delete().eq('id', plotId);
       if (error) throw error;
+      if (refetch) refetch();
       if (selectedPlot?.id === plotId) setSelectedPlot(null);
     } catch (err) {
       alert('Error deleting plot: ' + err.message);
@@ -689,6 +694,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
      if (!window.confirm(`Are you sure you want to delete ${bulkSelectedIds.length} plots?`)) return;
      try {
        await supabase.from('farm_plots').delete().in('id', bulkSelectedIds);
+       if (refetch) refetch();
        setBulkSelectedIds([]);
      } catch (err) {
        alert("Error deleting plots: " + err.message);
