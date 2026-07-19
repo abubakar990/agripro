@@ -162,6 +162,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const farmLayerRef = useRef([]);
   
   const [mapType, setMapType] = useState('hybrid');
+  const [mapOverlay, setMapOverlay] = useState('performance'); // performance, crop, soil, none
   const [selectedPlot, setSelectedPlot] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDrawMode, setIsDrawMode] = useState(null);
@@ -722,6 +723,41 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
         </button>
       </div>
 
+      {/* Map Overlay Controls */}
+      <div className="absolute top-16 right-4 z-[400] dji-panel flex flex-col overflow-hidden">
+        <div className="px-3 py-1.5 bg-slate-900/80 text-[9px] text-slate-400 font-bold uppercase tracking-widest text-center border-b border-slate-700/50">Data Overlay</div>
+        <div className="flex">
+          <button 
+            className={`px-3 py-2 text-[10px] font-bold uppercase transition-colors cursor-pointer ${mapOverlay === 'performance' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+            onClick={() => setMapOverlay('performance')}
+            title="Profitability Heatmap"
+          >
+            Profit
+          </button>
+          <button 
+            className={`px-3 py-2 text-[10px] font-bold uppercase transition-colors border-l border-r border-slate-700/50 cursor-pointer ${mapOverlay === 'crop' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+            onClick={() => setMapOverlay('crop')}
+            title="Active Crop Map"
+          >
+            Crop
+          </button>
+          <button 
+            className={`px-3 py-2 text-[10px] font-bold uppercase transition-colors border-r border-slate-700/50 cursor-pointer ${mapOverlay === 'soil' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+            onClick={() => setMapOverlay('soil')}
+            title="Soil Type/Quality Map"
+          >
+            Soil
+          </button>
+          <button 
+            className={`px-3 py-2 text-[10px] font-bold uppercase transition-colors cursor-pointer ${mapOverlay === 'none' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+            onClick={() => setMapOverlay('none')}
+            title="Boundary Only"
+          >
+            None
+          </button>
+        </div>
+      </div>
+
       {/* Search Bar */}
       <div className="absolute top-16 left-4 z-[400]">
         <form onSubmit={handleSearch} className="dji-panel flex overflow-hidden">
@@ -793,14 +829,44 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
               try {
                 const positions = geoJSONToLatLngs(plot.boundary);
                 if (positions.length === 0) return null;
-                const score = getPlotScore(plot.id, { expenses, revenue, cropCycles, farmPlots: plots, farms });
-                const color = getScoreColor(score);
+                
+                // Determine color based on overlay
+                let color = '#10b981'; // default emerald
+                let fillOpacity = selectedPlot?.id === plot.id ? 0.5 : 0.2;
+                
+                if (mapOverlay === 'performance') {
+                  const score = getPlotScore(plot.id, { expenses, revenue, cropCycles, farmPlots: plots, farms });
+                  color = getScoreColor(score);
+                  fillOpacity = selectedPlot?.id === plot.id ? 0.7 : 0.4;
+                } else if (mapOverlay === 'crop') {
+                  const activeCycle = cropCycles.find(c => c.plot_id === plot.id && c.status !== 'Harvested' && c.status !== 'Failed');
+                  if (activeCycle) {
+                    // Generate a color based on crop name hash
+                    const hash = activeCycle.crop_name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                    const hue = hash % 360;
+                    color = `hsl(${hue}, 70%, 50%)`;
+                    fillOpacity = selectedPlot?.id === plot.id ? 0.7 : 0.4;
+                  } else {
+                    color = '#64748b'; // slate-500
+                    fillOpacity = 0.2;
+                  }
+                } else if (mapOverlay === 'soil') {
+                  if (plot.soil_quality === 'Excellent') color = '#3b82f6'; // blue
+                  else if (plot.soil_quality === 'Good') color = '#22c55e'; // green
+                  else if (plot.soil_quality === 'Fair') color = '#eab308'; // yellow
+                  else if (plot.soil_quality === 'Poor') color = '#ef4444'; // red
+                  else color = '#94a3b8'; // default gray
+                  fillOpacity = selectedPlot?.id === plot.id ? 0.7 : 0.4;
+                } else if (mapOverlay === 'none') {
+                   color = '#10b981';
+                   fillOpacity = selectedPlot?.id === plot.id ? 0.3 : 0.05; // very transparent
+                }
                 
                 return (
                   <Polygon
                     key={plot.id}
                     positions={positions}
-                    pathOptions={{ color: color, weight: 1.5, fillColor: color, fillOpacity: selectedPlot?.id === plot.id ? 0.5 : 0.2 }}
+                    pathOptions={{ color: color, weight: 1.5, fillColor: color, fillOpacity: fillOpacity }}
                     eventHandlers={{ click: () => { setSelectedPlot(plot); if (!isSidebarOpen) setIsSidebarOpen(true); } }}
                     ref={(ref) => { if (ref) { plotLayersRef.current[plot.id] = ref; } }}
                   >
@@ -808,7 +874,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                       <div className="font-sans">
                         <h3 className="font-bold text-sm m-0">{plot.name}</h3>
                         <p className="text-xs text-gray-500 m-0">{parseFloat(plot.area_acres || 0).toFixed(2)} Acres</p>
-                        <p className="text-xs mt-1 m-0">Soil: {plot.soil_type || '—'}</p>
+                        <p className="text-xs mt-1 m-0">Soil: {plot.soil_type || '—'} ({plot.soil_quality || 'Unknown'})</p>
                       </div>
                     </Popup>
                   </Polygon>
