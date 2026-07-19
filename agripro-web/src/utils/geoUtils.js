@@ -7,6 +7,7 @@ import area from '@turf/area';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import booleanIntersects from '@turf/boolean-intersects';
 import bbox from '@turf/bbox';
+import transformRotate from '@turf/transform-rotate';
 
 /**
  * Calculate area in acres from an array of [lat, lng] coordinates
@@ -143,26 +144,36 @@ export const addPolygonToFeatureCollection = (existingGeoJSON, newPolygonGeoJSON
   }
 };
 
-export const autoGeneratePlotsForBoundary = (farmBoundaryGeoJSON, lengthFt, widthFt) => {
+export const autoGeneratePlotsForBoundary = (farmBoundaryGeoJSON, lengthFt, widthFt, angleDegrees = 0, keepInside = false) => {
   if (!farmBoundaryGeoJSON || !lengthFt || !widthFt) return [];
   
   try {
     const farmFeature = turf.feature(farmBoundaryGeoJSON);
-    const [minLng, minLat, maxLng, maxLat] = bbox(farmFeature);
+    const [farmMinLng, farmMinLat, farmMaxLng, farmMaxLat] = bbox(farmFeature);
+    const pivot = [(farmMinLng + farmMaxLng) / 2, (farmMinLat + farmMaxLat) / 2];
     
     // Degrees per foot roughly
+    const midLat = pivot[1];
     const latOffsetPerFt = 1 / 364000;
-    const midLat = (minLat + maxLat) / 2;
     const lngOffsetPerFt = 1 / (Math.cos(midLat * Math.PI / 180) * 364000);
     
     const stepLat = lengthFt * latOffsetPerFt;
     const stepLng = widthFt * lngOffsetPerFt;
     
+    // Expand bounding box so rotated grids still cover the corners
+    const expandFactor = 0.5;
+    const width = farmMaxLng - farmMinLng;
+    const height = farmMaxLat - farmMinLat;
+    const expandedMinLng = farmMinLng - (width * expandFactor);
+    const expandedMaxLng = farmMaxLng + (width * expandFactor);
+    const expandedMinLat = farmMinLat - (height * expandFactor);
+    const expandedMaxLat = farmMaxLat + (height * expandFactor);
+    
     const plots = [];
     
-    for (let lat = minLat; lat < maxLat; lat += stepLat) {
-      for (let lng = minLng; lng < maxLng; lng += stepLng) {
-        const boxGeoJSON = turf.polygon([[
+    for (let lat = expandedMinLat; lat < expandedMaxLat; lat += stepLat) {
+      for (let lng = expandedMinLng; lng < expandedMaxLng; lng += stepLng) {
+        let boxGeoJSON = turf.polygon([[
           [lng, lat],
           [lng + stepLng, lat],
           [lng + stepLng, lat + stepLat],
@@ -170,17 +181,28 @@ export const autoGeneratePlotsForBoundary = (farmBoundaryGeoJSON, lengthFt, widt
           [lng, lat] // close
         ]]);
         
+        if (angleDegrees !== 0) {
+           boxGeoJSON = transformRotate(boxGeoJSON, angleDegrees, { pivot });
+        }
+        
         if (booleanIntersects(boxGeoJSON, farmFeature)) {
-          const intersection = intersect(turf.featureCollection([boxGeoJSON, farmFeature]));
-          if (intersection) {
-            const areaSqMeters = area(intersection);
-            const acres = Math.round((areaSqMeters / 4046.8564224) * 100) / 100;
-            if (acres > 0.05) { // min 0.05 acres to avoid tiny slivers
-              plots.push({
-                geojson: intersection.geometry,
-                acres: acres
-              });
-            }
+          if (keepInside) {
+             const intersection = intersect(turf.featureCollection([boxGeoJSON, farmFeature]));
+             if (intersection) {
+                const intersectArea = area(intersection);
+                const originalArea = area(boxGeoJSON);
+                if (intersectArea > originalArea * 0.99) {
+                   const acres = Math.round((originalArea / 4046.8564224) * 100) / 100;
+                   if (acres > 0.05) plots.push({ geojson: boxGeoJSON.geometry, acres });
+                }
+             }
+          } else {
+             const intersection = intersect(turf.featureCollection([boxGeoJSON, farmFeature]));
+             if (intersection) {
+               const areaSqMeters = area(intersection);
+               const acres = Math.round((areaSqMeters / 4046.8564224) * 100) / 100;
+               if (acres > 0.05) plots.push({ geojson: intersection.geometry, acres });
+             }
           }
         }
       }

@@ -168,6 +168,8 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const [searchQuery, setSearchQuery] = useState('');
   const [isDrawMode, setIsDrawMode] = useState(null);
   const [redrawPlotId, setRedrawPlotId] = useState(null);
+  const [gridPreviewPlots, setGridPreviewPlots] = useState([]);
+  const [gridParams, setGridParams] = useState({ length_ft: 207, width_ft: 207, angle: 0, keepInside: false });
   
   // Geoman Vertex Adjustment States
   const [adjustingPlotId, setAdjustingPlotId] = useState(null);
@@ -235,6 +237,18 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       }
     }
   }, [adjustingFarmBoundary, farm?.boundary, adjustingPlotId]);
+
+  useEffect(() => {
+    if (isDrawMode === 'grid_preview' && farm?.boundary) {
+      const timer = setTimeout(() => {
+         const preview = autoGeneratePlotsForBoundary(farm.boundary, parseFloat(gridParams.length_ft) || 100, parseFloat(gridParams.width_ft) || 100, parseFloat(gridParams.angle) || 0, gridParams.keepInside);
+         setGridPreviewPlots(preview);
+      }, 100); // debounce slightly
+      return () => clearTimeout(timer);
+    } else {
+      setGridPreviewPlots([]);
+    }
+  }, [isDrawMode, gridParams, farm?.boundary]);
 
   useEffect(() => {
     Object.values(plotLayersRef.current).forEach(layer => {
@@ -564,34 +578,32 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     }
   };
 
-  const handleAutoFillFarm = async () => {
-    if (!selectedPresetId) {
-      alert("Please select an Acre Dimension first!");
-      return;
-    }
+  const handleStartGridPreview = () => {
+    if (!farm.boundary) return;
     const preset = acrePresets.find(p => p.id === selectedPresetId);
-    if (!preset) return;
-    
+    if (preset) {
+       setGridParams({ ...gridParams, length_ft: parseFloat(preset.length_ft), width_ft: parseFloat(preset.width_ft) });
+    }
+    setIsDrawMode('grid_preview');
+  };
+
+  const handleSaveGrid = async () => {
     if (plots.length > 0) {
       const confirmOverwrite = window.confirm("This will erase all current plots and auto-fill the entire farm boundary. Proceed?");
       if (!confirmOverwrite) return;
     }
     
     try {
-      const generatedPlots = autoGeneratePlotsForBoundary(farm.boundary, preset.length_ft, preset.width_ft);
-      
-      if (generatedPlots.length === 0) {
-         alert('Could not generate any plots. Boundary might be too small or irregular for this dimension.');
+      if (gridPreviewPlots.length === 0) {
+         alert('No plots generated in preview.');
          return;
       }
       
-      // Delete existing plots
       if (plots.length > 0) {
          await supabase.from('farm_plots').delete().eq('farm_id', numericFarmId);
       }
       
-      // Insert new plots
-      const plotsToInsert = generatedPlots.map((gp, idx) => ({
+      const plotsToInsert = gridPreviewPlots.map((gp, idx) => ({
          farm_id: numericFarmId,
          name: `Auto Plot ${idx + 1}`,
          area_acres: gp.acres,
@@ -603,9 +615,10 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       const { error } = await supabase.from('farm_plots').insert(plotsToInsert);
       if (error) throw error;
       
+      setIsDrawMode(null);
       alert(`Successfully generated ${plotsToInsert.length} plots!`);
     } catch (err) {
-      alert("Error auto-filling farm: " + err.message);
+      alert("Error saving grid: " + err.message);
     }
   };
 
@@ -800,15 +813,51 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
           </button>
           
           <button 
-            className={`p-3 transition-colors ${'text-slate-300 hover:bg-slate-800 hover:text-emerald-400'} ${!farm.boundary || !selectedPresetId ? 'opacity-50 cursor-not-allowed' : ''}`}
-            onClick={handleAutoFillFarm}
-            disabled={!!isDrawMode || !farm.boundary || !selectedPresetId}
-            title="Auto-Fill Farm with Grid (Select Dimension in Sidebar)"
+            className={`p-3 transition-colors ${isDrawMode === 'grid_preview' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-emerald-400'} ${!farm.boundary ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={handleStartGridPreview}
+            disabled={!!isDrawMode || !farm.boundary}
+            title="Interactive Grid Generator"
           >
             <IconGridDots size={20} />
           </button>
         </div>
       </div>
+
+      {/* Grid Generator Control Panel */}
+      {isDrawMode === 'grid_preview' && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[400] w-full max-w-[500px]">
+          <div className="dji-panel p-4 animate-in fade-in slide-in-from-top-4">
+            <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center gap-2">
+              <IconGridDots size={16} /> Interactive Grid Generator
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Width (ft)</label>
+                <input type="number" className="dji-input" value={gridParams.width_ft} onChange={e => setGridParams({...gridParams, width_ft: e.target.value})} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Length (ft)</label>
+                <input type="number" className="dji-input" value={gridParams.length_ft} onChange={e => setGridParams({...gridParams, length_ft: e.target.value})} />
+              </div>
+              <div className="flex flex-col gap-1 col-span-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Rotation Angle ({gridParams.angle}°)</label>
+                <input type="range" min="0" max="360" className="w-full accent-emerald-500" value={gridParams.angle} onChange={e => setGridParams({...gridParams, angle: e.target.value})} />
+              </div>
+              <div className="flex items-center gap-2 col-span-2">
+                <input type="checkbox" id="keepInside" className="accent-emerald-500" checked={gridParams.keepInside} onChange={e => setGridParams({...gridParams, keepInside: e.target.checked})} />
+                <label htmlFor="keepInside" className="text-xs text-slate-300">Keep perfectly inside boundary (ignore edges)</label>
+              </div>
+            </div>
+            <div className="flex justify-between items-center mt-4 pt-3 border-t border-slate-700/50">
+              <span className="text-xs font-bold text-amber-400">{gridPreviewPlots.length} plots generated</span>
+              <div className="flex gap-2">
+                <button className="dji-button" onClick={() => setIsDrawMode(null)}>Cancel</button>
+                <button className="dji-button-primary" onClick={handleSaveGrid}><IconCheck size={14} className="mr-1"/> Save Grid</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search Bar */}
       <div className="absolute top-16 left-4 z-[400]">
@@ -876,7 +925,23 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
               return null;
             })()}
 
-            {plots.map(plot => {
+            {/* Grid Preview Overlays */}
+            {isDrawMode === 'grid_preview' && gridPreviewPlots.map((plot, idx) => {
+              try {
+                const positions = geoJSONToLatLngs(plot.geojson);
+                if (positions.length === 0) return null;
+                return (
+                  <Polygon
+                    key={`preview-${idx}`}
+                    positions={positions}
+                    pathOptions={{ color: '#f59e0b', weight: 2, dashArray: '4, 4', fillColor: '#f59e0b', fillOpacity: 0.3 }}
+                  />
+                );
+              } catch (e) { return null; }
+            })}
+
+            {/* Render Actual Plots (Only when not previewing a replacement grid to avoid mess) */}
+            {isDrawMode !== 'grid_preview' && plots.map(plot => {
               if (!plot.boundary) return null;
               try {
                 const positions = geoJSONToLatLngs(plot.boundary);
