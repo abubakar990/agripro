@@ -445,9 +445,13 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       if (plots.length > 0) {
         const adjustedPlots = autoAdjustPlotsToBoundary(plots, finalBoundary);
         if (adjustedPlots.length > 0) {
-          const promises = adjustedPlots.map(p => 
-            supabase.from('farm_plots').update({ boundary: p.boundary, area_acres: p.area_acres }).eq('id', p.id)
-          );
+          const promises = adjustedPlots.map(p => {
+            if (p.boundary === null || p.area_acres === 0) {
+              return supabase.from('farm_plots').delete().eq('id', p.id);
+            } else {
+              return supabase.from('farm_plots').update({ boundary: p.boundary, area_acres: p.area_acres }).eq('id', p.id);
+            }
+          });
           await Promise.all(promises);
         }
       }
@@ -487,9 +491,13 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       if (plots.length > 0) {
         const adjustedPlots = autoAdjustPlotsToBoundary(plots, newBoundary);
         if (adjustedPlots.length > 0) {
-          const promises = adjustedPlots.map(p => 
-            supabase.from('farm_plots').update({ boundary: p.boundary, area_acres: p.area_acres }).eq('id', p.id)
-          );
+          const promises = adjustedPlots.map(p => {
+            if (p.boundary === null || p.area_acres === 0) {
+              return supabase.from('farm_plots').delete().eq('id', p.id);
+            } else {
+              return supabase.from('farm_plots').update({ boundary: p.boundary, area_acres: p.area_acres }).eq('id', p.id);
+            }
+          });
           await Promise.all(promises);
         }
       }
