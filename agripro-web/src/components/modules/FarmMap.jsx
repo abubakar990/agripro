@@ -10,7 +10,7 @@ import { formatPKR } from '../../utils/format';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
-import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck } from '@tabler/icons-react';
+import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity } from '@tabler/icons-react';
 
 const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, onPlotRedrawn, mapRef }) => {
   const map = useMap();
