@@ -4,7 +4,7 @@ import L from 'leaflet';
 import '@geoman-io/leaflet-geoman-free';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { calculateAcresFromLatLngs, layerToGeoJSON, geoJSONToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM, TILE_LAYERS, createIntersectedAcreBox, addPolygonToFeatureCollection, autoGeneratePlotsForBoundary } from '../../utils/geoUtils';
+import { calculateAcresFromLatLngs, layerToGeoJSON, geoJSONToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM, TILE_LAYERS, createIntersectedAcreBox, addPolygonToFeatureCollection, autoGeneratePlotsForBoundary, autoAdjustPlotsToBoundary } from '../../utils/geoUtils';
 import { getPlotScore, getScoreColor, getScoreLabel } from '../../utils/perAcreCalc';
 import { formatPKR } from '../../utils/format';
 import Modal from '../shared/Modal';
@@ -382,8 +382,19 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       }).eq('id', numericFarmId);
       if (error) throw error;
       
+      // Auto-adjust plots to the new farm boundary
+      if (plots.length > 0) {
+        const adjustedPlots = autoAdjustPlotsToBoundary(plots, finalBoundary);
+        if (adjustedPlots.length > 0) {
+          const promises = adjustedPlots.map(p => 
+            supabase.from('farm_plots').update({ boundary: p.boundary, area_acres: p.area_acres }).eq('id', p.id)
+          );
+          await Promise.all(promises);
+        }
+      }
+      
       setAdjustingFarmBoundary(false);
-      alert('Farm boundary adjustments saved!');
+      alert('Farm boundary adjustments saved and plots adjusted!');
     } catch (err) {
       alert('Error saving boundary: ' + err.message);
     }
@@ -412,7 +423,19 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       }).eq('id', numericFarmId);
       
       if (error) throw error;
-      alert('Boundary area deleted.');
+      
+      // Auto-adjust plots to the new farm boundary
+      if (plots.length > 0) {
+        const adjustedPlots = autoAdjustPlotsToBoundary(plots, newBoundary);
+        if (adjustedPlots.length > 0) {
+          const promises = adjustedPlots.map(p => 
+            supabase.from('farm_plots').update({ boundary: p.boundary, area_acres: p.area_acres }).eq('id', p.id)
+          );
+          await Promise.all(promises);
+        }
+      }
+      
+      alert('Boundary area deleted and plots adjusted.');
     } catch (err) {
       alert('Error deleting boundary: ' + err.message);
     }

@@ -192,6 +192,65 @@ export const autoGeneratePlotsForBoundary = (farmBoundaryGeoJSON, lengthFt, widt
   }
 };
 
+export const autoAdjustPlotsToBoundary = (plots, newFarmBoundaryGeoJSON) => {
+  if (!plots || plots.length === 0) return [];
+  
+  try {
+    const updatedPlots = [];
+    
+    if (!newFarmBoundaryGeoJSON) {
+      // If farm boundary is completely gone, nullify all plots
+      for (const plot of plots) {
+        if (plot.boundary) {
+          updatedPlots.push({ id: plot.id, boundary: null, area_acres: 0 });
+        }
+      }
+      return updatedPlots;
+    }
+
+    const farmFeature = turf.feature(newFarmBoundaryGeoJSON);
+
+    for (const plot of plots) {
+      if (!plot.boundary) continue;
+      
+      const plotFeature = turf.feature(plot.boundary);
+      
+      if (booleanIntersects(plotFeature, farmFeature)) {
+        const intersection = intersect(turf.featureCollection([plotFeature, farmFeature]));
+        if (intersection) {
+          const areaSqMeters = area(intersection);
+          const acres = Math.round((areaSqMeters / 4046.8564224) * 100) / 100;
+          
+          updatedPlots.push({
+            id: plot.id,
+            boundary: intersection.geometry,
+            area_acres: acres
+          });
+        } else {
+          // completely outside, area 0
+          updatedPlots.push({
+            id: plot.id,
+            boundary: null,
+            area_acres: 0
+          });
+        }
+      } else {
+        // completely outside
+        updatedPlots.push({
+          id: plot.id,
+          boundary: null,
+          area_acres: 0
+        });
+      }
+    }
+    
+    return updatedPlots;
+  } catch (err) {
+    console.error('Auto adjust plots error:', err);
+    return [];
+  }
+};
+
 export const DEFAULT_CENTER = [31.4187, 73.0791];
 export const DEFAULT_ZOOM = 16;
 
