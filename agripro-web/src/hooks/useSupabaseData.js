@@ -25,6 +25,7 @@ export function useSupabaseData(session, preferredOrgId) {
     sprayLog: [],
     vendorsBuyers: [],
     categories: [],
+    acrePresets: [],
   });
   const [loading, setLoading] = useState(true);
 
@@ -81,7 +82,8 @@ export function useSupabaseData(session, preferredOrgId) {
         { data: irrigationLog },
         { data: sprayLog },
         { data: vendorsBuyers },
-        { data: categories }
+        { data: categories },
+        { data: acrePresets }
       ] = await Promise.all([
         supabase.from('revenue').select('*').in('farm_id', farmIds).order('date', { ascending: false }),
         supabase.from('expenses').select('*').in('farm_id', farmIds).order('date', { ascending: false }),
@@ -97,7 +99,8 @@ export function useSupabaseData(session, preferredOrgId) {
         supabase.from('irrigation_log').select('*').in('farm_id', farmIds).order('date', { ascending: false }),
         supabase.from('spray_log').select('*').in('farm_id', farmIds).order('date', { ascending: false }),
         supabase.from('vendors_buyers').select('*').eq('org_id', currentOrg.id).order('name'),
-        supabase.from('categories').select('*').or(`org_id.eq.${currentOrg.id},user_id.is.null`).order('name')
+        supabase.from('categories').select('*').or(`org_id.eq.${currentOrg.id},user_id.is.null`).order('name'),
+        supabase.from('acre_presets').select('*').or(`org_id.eq.${currentOrg.id},org_id.is.null`).order('id')
       ]);
 
       // Nested fetches for details (health, etc)
@@ -142,7 +145,8 @@ export function useSupabaseData(session, preferredOrgId) {
         irrigationLog: irrigationLog || [],
         sprayLog: sprayLog || [],
         vendorsBuyers: vendorsBuyers || [],
-        categories: categories || []
+        categories: categories || [],
+        acrePresets: acrePresets || []
       });
     } catch (error) {
       console.error('Error fetching data from Supabase:', error);
@@ -192,6 +196,7 @@ export function useSupabaseData(session, preferredOrgId) {
         sprayLog: [],
         vendorsBuyers: [],
         categories: [],
+        acrePresets: [],
       });
       setLoading(false);
     }
