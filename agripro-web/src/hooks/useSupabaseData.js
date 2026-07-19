@@ -93,11 +93,11 @@ export function useSupabaseData(session, preferredOrgId) {
         supabase.from('workers').select('*').in('farm_id', farmIds).order('id'),
         supabase.from('attendance').select('*').in('farm_id', farmIds).order('date', { ascending: false }),
         supabase.from('machinery').select('*').in('farm_id', farmIds).order('id'),
-        supabase.from('machine_usage').select('*').in('farm_id', farmIds).order('date', { ascending: false }),
+        supabase.from('machine_usage').select('*').in('farm_id', farmIds).order('date', { ascending: false }).limit(500),
         supabase.from('livestock').select('*').in('farm_id', farmIds).order('id'),
-        supabase.from('mandi_prices').select('*').order('date', { ascending: false }), // Global
-        supabase.from('irrigation_log').select('*').in('farm_id', farmIds).order('date', { ascending: false }),
-        supabase.from('spray_log').select('*').in('farm_id', farmIds).order('date', { ascending: false }),
+        supabase.from('mandi_prices').select('*').order('date', { ascending: false }).limit(200), // Global
+        supabase.from('irrigation_log').select('*').in('farm_id', farmIds).order('date', { ascending: false }).limit(500),
+        supabase.from('spray_log').select('*').in('farm_id', farmIds).order('date', { ascending: false }).limit(500),
         supabase.from('vendors_buyers').select('*').eq('org_id', currentOrg.id).order('name'),
         supabase.from('categories').select('*').or(`org_id.eq.${currentOrg.id},user_id.is.null`).order('name'),
         supabase.from('acre_presets').select('*').or(`org_id.eq.${currentOrg.id},org_id.is.null`).order('id')
@@ -156,6 +156,8 @@ export function useSupabaseData(session, preferredOrgId) {
   };
 
   useEffect(() => {
+    let fetchTimeout;
+    
     if (session) {
       fetchData();
 
@@ -164,11 +166,15 @@ export function useSupabaseData(session, preferredOrgId) {
           event: '*', 
           schema: 'public' 
         }, (payload) => {
-          fetchData(true); // Silent refetch
+          if (fetchTimeout) clearTimeout(fetchTimeout);
+          fetchTimeout = setTimeout(() => {
+            fetchData(true); // Silent refetch debounced
+          }, 2000);
         })
         .subscribe();
 
       return () => {
+        if (fetchTimeout) clearTimeout(fetchTimeout);
         supabase.removeChannel(channel);
       };
     } else {
