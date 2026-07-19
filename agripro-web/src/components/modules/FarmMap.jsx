@@ -10,7 +10,7 @@ import { formatPKR } from '../../utils/format';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
-import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconHandGrab, IconGridDots, IconCut, IconVectorTriangle, IconList } from '@tabler/icons-react';
+import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconHandGrab, IconGridDots, IconCut, IconVectorTriangle, IconList, IconArrowBackUp, IconArrowForwardUp } from '@tabler/icons-react';
 
 const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, onPlotRedrawn, onPlotCut, mapRef }) => {
   const map = useMap();
@@ -198,6 +198,40 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const [dynamicAreaAcres, setDynamicAreaAcres] = useState(null);
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+
+  const pushAction = useCallback((action) => {
+    setUndoStack(prev => [...prev, action]);
+    setRedoStack([]);
+  }, []);
+
+  const handleUndo = async () => {
+    if (undoStack.length === 0) return;
+    const action = undoStack[undoStack.length - 1];
+    try {
+      await action.undo();
+      setUndoStack(prev => prev.slice(0, -1));
+      setRedoStack(prev => [...prev, action]);
+      if (refetch) refetch();
+    } catch (err) {
+      alert("Undo failed: " + err.message);
+    }
+  };
+
+  const handleRedo = async () => {
+    if (redoStack.length === 0) return;
+    const action = redoStack[redoStack.length - 1];
+    try {
+      await action.redo();
+      setRedoStack(prev => prev.slice(0, -1));
+      setUndoStack(prev => [...prev, action]);
+      if (refetch) refetch();
+    } catch (err) {
+      alert("Redo failed: " + err.message);
+    }
+  };
   
   const [isAcreModalOpen, setIsAcreModalOpen] = useState(false);
   const [customPreset, setCustomPreset] = useState({ name: '', length_ft: '', width_ft: '' });
@@ -592,8 +626,21 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       if (newPlots.length > 0) {
          const { error: delError } = await supabase.from('farm_plots').delete().eq('id', cutPlot.id);
          if (delError) throw delError;
-         const { error: insError } = await supabase.from('farm_plots').insert(newPlots);
+         const { data: inserted, error: insError } = await supabase.from('farm_plots').insert(newPlots).select();
          if (insError) throw insError;
+         
+         pushAction({
+            name: 'Split Plot',
+            undo: async () => {
+               await supabase.from('farm_plots').delete().in('id', inserted.map(i => i.id));
+               await supabase.from('farm_plots').insert([cutPlot]);
+            },
+            redo: async () => {
+               await supabase.from('farm_plots').delete().eq('id', cutPlot.id);
+               await supabase.from('farm_plots').insert(inserted);
+            }
+         });
+         
          if (refetch) refetch();
       }
     } catch(err) {
@@ -624,8 +671,21 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
        const { error: delError } = await supabase.from('farm_plots').delete().in('id', selectedPlotIdsForMerge);
        if (delError) throw delError;
        
-       const { error: insError } = await supabase.from('farm_plots').insert([newPlot]);
+       const { data: inserted, error: insError } = await supabase.from('farm_plots').insert([newPlot]).select();
        if (insError) throw insError;
+       
+       pushAction({
+         name: 'Merge Plots',
+         undo: async () => {
+           await supabase.from('farm_plots').delete().eq('id', inserted[0].id);
+           await supabase.from('farm_plots').insert(plotsToMerge);
+         },
+         redo: async () => {
+           await supabase.from('farm_plots').delete().in('id', selectedPlotIdsForMerge);
+           await supabase.from('farm_plots').insert(inserted);
+         }
+       });
+       
        if (refetch) refetch();
        
        setSelectedPlotIdsForMerge([]);
@@ -669,8 +729,18 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
          soil_quality: 'Good'
       }));
       
-      const { error } = await supabase.from('farm_plots').insert(plotsToInsert);
+      const { data: inserted, error } = await supabase.from('farm_plots').insert(plotsToInsert).select();
       if (error) throw error;
+      
+      pushAction({
+        name: 'Generate Grid',
+        undo: async () => {
+          await supabase.from('farm_plots').delete().in('id', inserted.map(i => i.id));
+        },
+        redo: async () => {
+          await supabase.from('farm_plots').insert(inserted);
+        }
+      });
       
       if (refetch) refetch();
       alert(`Successfully generated ${plotsToInsert.length} plots! The map will now refresh.`);
@@ -685,8 +755,22 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const handleDeletePlot = async (plotId) => {
     if (!window.confirm("Are you sure you want to completely delete this plot?")) return;
     try {
+      const plotToDelete = plots.find(p => p.id === plotId);
       const { error } = await supabase.from('farm_plots').delete().eq('id', plotId);
       if (error) throw error;
+      
+      if (plotToDelete) {
+         pushAction({
+            name: 'Delete Plot',
+            undo: async () => {
+               await supabase.from('farm_plots').insert([plotToDelete]);
+            },
+            redo: async () => {
+               await supabase.from('farm_plots').delete().eq('id', plotId);
+            }
+         });
+      }
+      
       if (refetch) refetch();
       if (selectedPlot?.id === plotId) setSelectedPlot(null);
     } catch (err) {
@@ -698,7 +782,19 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
      if (bulkSelectedIds.length === 0) return;
      if (!window.confirm(`Are you sure you want to delete ${bulkSelectedIds.length} plots?`)) return;
      try {
+       const plotsToDelete = plots.filter(p => bulkSelectedIds.includes(p.id));
        await supabase.from('farm_plots').delete().in('id', bulkSelectedIds);
+       
+       pushAction({
+          name: 'Bulk Delete',
+          undo: async () => {
+             await supabase.from('farm_plots').insert(plotsToDelete);
+          },
+          redo: async () => {
+             await supabase.from('farm_plots').delete().in('id', bulkSelectedIds);
+          }
+       });
+       
        if (refetch) refetch();
        setBulkSelectedIds([]);
      } catch (err) {
@@ -982,6 +1078,26 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
             <IconSearch size={14} />
           </button>
         </form>
+      </div>
+
+      {/* Undo/Redo Buttons */}
+      <div className="absolute top-4 right-4 z-[400] flex gap-2">
+        <button 
+          onClick={handleUndo} 
+          disabled={undoStack.length === 0} 
+          className={`dji-panel p-2 transition-colors ${undoStack.length === 0 ? 'opacity-50 cursor-not-allowed text-slate-500' : 'text-slate-300 hover:text-emerald-400'}`}
+          title="Undo Last Action"
+        >
+          <IconArrowBackUp size={20} />
+        </button>
+        <button 
+          onClick={handleRedo} 
+          disabled={redoStack.length === 0} 
+          className={`dji-panel p-2 transition-colors ${redoStack.length === 0 ? 'opacity-50 cursor-not-allowed text-slate-500' : 'text-slate-300 hover:text-emerald-400'}`}
+          title="Redo Action"
+        >
+          <IconArrowForwardUp size={20} />
+        </button>
       </div>
 
       {/* Sidebar Toggle - Mobile */}
