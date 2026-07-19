@@ -163,6 +163,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   
   const [mapType, setMapType] = useState('hybrid');
   const [mapOverlay, setMapOverlay] = useState('performance'); // performance, crop, soil, none
+  const [isLayersOpen, setIsLayersOpen] = useState(false);
   const [selectedPlot, setSelectedPlot] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDrawMode, setIsDrawMode] = useState(null);
@@ -709,59 +710,102 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
         </div>
       </div>
 
-      {/* Map Type Controls */}
-      <div className="absolute top-4 right-4 z-[400] dji-panel flex overflow-hidden">
+      {/* Layers Menu (Bottom Left) */}
+      <div className="absolute bottom-4 left-4 z-[400] flex flex-col-reverse items-start gap-2">
         <button 
-          className={`px-4 py-2.5 text-[10px] font-bold tracking-widest uppercase transition-colors cursor-pointer ${mapType === 'hybrid' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-          onClick={() => setMapType('hybrid')}
+          className={`dji-panel p-3 transition-colors cursor-pointer ${isLayersOpen ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+          onClick={() => setIsLayersOpen(!isLayersOpen)}
+          title="Map Layers & Overlays"
         >
-          Hybrid
+          <IconLayersIntersect size={24} />
         </button>
-        <button 
-          className={`px-4 py-2.5 text-[10px] font-bold tracking-widest uppercase transition-colors border-l border-r border-slate-700/50 cursor-pointer ${mapType === 'satellite' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-          onClick={() => setMapType('satellite')}
-        >
-          Satellite
-        </button>
-        <button 
-          className={`px-4 py-2.5 text-[10px] font-bold tracking-widest uppercase transition-colors cursor-pointer ${mapType === 'street' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-          onClick={() => setMapType('street')}
-        >
-          Street
-        </button>
+        
+        {isLayersOpen && (
+          <div className="dji-panel p-3 mb-2 flex flex-col gap-4 w-48 animate-in fade-in slide-in-from-bottom-2">
+            <div>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-2">Base Map</p>
+              <div className="flex flex-col gap-1">
+                {['hybrid', 'satellite', 'street'].map(type => (
+                  <button 
+                    key={type}
+                    className={`text-left px-3 py-1.5 rounded text-xs font-medium transition-colors ${mapType === type ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30' : 'text-slate-300 hover:bg-slate-800'}`}
+                    onClick={() => setMapType(type)}
+                  >
+                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="h-px w-full bg-slate-700/50" />
+            <div>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-2">Data Overlay</p>
+              <div className="flex flex-col gap-1">
+                {[
+                  { id: 'performance', label: 'Profit Heatmap' },
+                  { id: 'crop', label: 'Crop Types' },
+                  { id: 'soil', label: 'Soil Quality' },
+                  { id: 'none', label: 'Boundaries Only' }
+                ].map(overlay => (
+                  <button 
+                    key={overlay.id}
+                    className={`text-left px-3 py-1.5 rounded text-xs font-medium transition-colors ${mapOverlay === overlay.id ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30' : 'text-slate-300 hover:bg-slate-800'}`}
+                    onClick={() => setMapOverlay(overlay.id)}
+                  >
+                    {overlay.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Map Overlay Controls */}
-      <div className="absolute top-16 right-4 z-[400] dji-panel flex flex-col overflow-hidden">
-        <div className="px-3 py-1.5 bg-slate-900/80 text-[9px] text-slate-400 font-bold uppercase tracking-widest text-center border-b border-slate-700/50">Data Overlay</div>
-        <div className="flex">
+      {/* Vertical Toolbar (Left) */}
+      <div className="absolute top-32 left-4 z-[400] flex flex-col gap-2">
+        <div className="dji-panel flex flex-col overflow-hidden">
           <button 
-            className={`px-3 py-2 text-[10px] font-bold uppercase transition-colors cursor-pointer ${mapOverlay === 'performance' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-            onClick={() => setMapOverlay('performance')}
-            title="Profitability Heatmap"
+            className={`p-3 transition-colors border-b border-slate-700/50 ${isDrawMode === 'farm' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-emerald-400'} ${!farm.boundary ? 'animate-pulse bg-emerald-600/20 text-emerald-400' : ''}`}
+            onClick={startDrawFarm}
+            disabled={!!isDrawMode}
+            title={!farm.boundary ? "Draw First Farm Boundary" : "Add Farm Area"}
           >
-            Profit
+            <IconMap size={20} />
           </button>
+          
           <button 
-            className={`px-3 py-2 text-[10px] font-bold uppercase transition-colors border-l border-r border-slate-700/50 cursor-pointer ${mapOverlay === 'crop' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-            onClick={() => setMapOverlay('crop')}
-            title="Active Crop Map"
+            className={`p-3 transition-colors border-b border-slate-700/50 ${adjustingFarmBoundary ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-emerald-400'} ${!farm.boundary ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={() => farm.boundary && setAdjustingFarmBoundary(!adjustingFarmBoundary)}
+            disabled={!!isDrawMode || !farm.boundary}
+            title="Adjust Farm Boundaries"
           >
-            Crop
+            <IconDragDrop size={20} />
           </button>
+          
           <button 
-            className={`px-3 py-2 text-[10px] font-bold uppercase transition-colors border-r border-slate-700/50 cursor-pointer ${mapOverlay === 'soil' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-            onClick={() => setMapOverlay('soil')}
-            title="Soil Type/Quality Map"
+            className={`p-3 transition-colors border-b border-slate-700/50 ${isDrawMode === 'plot' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-emerald-400'} ${!farm.boundary ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={startDrawPlot}
+            disabled={!!isDrawMode || !farm.boundary}
+            title="Draw Freeform Plot"
           >
-            Soil
+            <IconPlus size={20} />
           </button>
+          
           <button 
-            className={`px-3 py-2 text-[10px] font-bold uppercase transition-colors cursor-pointer ${mapOverlay === 'none' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-            onClick={() => setMapOverlay('none')}
-            title="Boundary Only"
+            className={`p-3 transition-colors border-b border-slate-700/50 ${isDrawMode === 'acre_box' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-emerald-400'} ${!farm.boundary || !selectedPresetId ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={startAcreBoxTool}
+            disabled={!!isDrawMode || !farm.boundary || !selectedPresetId}
+            title="Place Single Grid Plot (Select Dimension in Sidebar)"
           >
-            None
+            <IconSquarePlus size={20} />
+          </button>
+          
+          <button 
+            className={`p-3 transition-colors ${'text-slate-300 hover:bg-slate-800 hover:text-emerald-400'} ${!farm.boundary || !selectedPresetId ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={handleAutoFillFarm}
+            disabled={!!isDrawMode || !farm.boundary || !selectedPresetId}
+            title="Auto-Fill Farm with Grid (Select Dimension in Sidebar)"
+          >
+            <IconGridDots size={20} />
           </button>
         </div>
       </div>
@@ -931,52 +975,23 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                   </button>
                 )}
               </div>
-              {farm.boundary && (
-                <button 
-                  className="dji-button-primary w-full mt-2 flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white" 
-                  onClick={handleAutoFillFarm} 
-                  disabled={!!isDrawMode || !selectedPresetId} 
-                  title="Auto-fill farm with grid"
-                >
-                  <IconGridDots size={16} /> Auto-Fill Farm
-                </button>
-              )}
             </div>
 
-            {!farm.boundary ? (
-              <button className="dji-button-primary w-full py-2" onClick={startDrawFarm} disabled={!!isDrawMode}>
-                <IconMap size={16} /> Draw First Farm Boundary
-              </button>
-            ) : (
-              <div className="flex flex-col gap-3">
-                
-                {adjustingFarmBoundary ? (
-                  <div className="bg-emerald-900/20 border border-emerald-500/30 p-3 rounded-lg flex flex-col gap-2">
-                    <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Adjusting Boundary</p>
-                    <p className="text-xs text-slate-300">Drag the white markers on the map to adjust the farm shape.</p>
-                    <div className="flex gap-2 mt-1">
-                      <button className="dji-button flex-1" onClick={() => setAdjustingFarmBoundary(false)}>Cancel</button>
-                      <button className="dji-button-primary flex-1" onClick={handleSaveFarmAdjustment}>
-                        <IconCheck size={14} className="mr-1"/> Save
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    <button className={`dji-button ${isDrawMode === 'farm' ? 'dji-button-active' : ''}`} onClick={startDrawFarm} disabled={!!isDrawMode}>
-                      <IconMap size={14} /> Add Area
-                    </button>
-                    <button className={`dji-button ${isDrawMode === 'plot' ? 'dji-button-active' : ''}`} onClick={startDrawPlot} disabled={!!isDrawMode}>
-                      <IconPlus size={14} /> Draw Plot
-                    </button>
-                    <button className="dji-button col-span-2" onClick={() => setAdjustingFarmBoundary(true)} title="Adjust Farm Boundary">
-                      <IconDragDrop size={14} className="text-emerald-400 mr-1"/> Adjust Farm Boundaries
-                    </button>
-                  </div>
-                )}
-                
-                {farm.boundary && (
-                  <div className="flex flex-col gap-2 mt-2 border-t border-slate-700/50 pt-3">
+            {adjustingFarmBoundary && (
+              <div className="bg-emerald-900/20 border border-emerald-500/30 p-3 rounded-lg flex flex-col gap-2 mt-2">
+                <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Adjusting Boundary</p>
+                <p className="text-xs text-slate-300">Drag the white markers on the map to adjust the farm shape.</p>
+                <div className="flex gap-2 mt-1">
+                  <button className="dji-button flex-1" onClick={() => setAdjustingFarmBoundary(false)}>Cancel</button>
+                  <button className="dji-button-primary flex-1" onClick={handleSaveFarmAdjustment}>
+                    <IconCheck size={14} className="mr-1"/> Save
+                  </button>
+                </div>
+              </div>
+            )}
+              
+            {farm.boundary && (
+              <div className="flex flex-col gap-2 mt-2 border-t border-slate-700/50 pt-3">
                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Active Boundaries ({farm.boundary.type === 'FeatureCollection' ? farm.boundary.features.length : 1})</p>
                     {(farm.boundary.type === 'FeatureCollection' ? farm.boundary.features : [{ geometry: farm.boundary }]).map((f, idx) => {
                       const acres = calculateAcresFromLatLngs(geoJSONToLatLngs(f.geometry)[0]);
@@ -1015,8 +1030,6 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                     })}
                   </div>
                 )}
-              </div>
-            )}
 
             {isDrawMode && (
               <div className="mt-4 pt-3 border-t border-slate-700/50">
