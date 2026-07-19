@@ -721,8 +721,10 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       const { error } = await supabase.from('farm_plots').insert(plotsToInsert);
       if (error) throw error;
       
-      setIsDrawMode(null);
-      alert(`Successfully generated ${plotsToInsert.length} plots!`);
+      alert(`Successfully generated ${plotsToInsert.length} plots! The map will now refresh.`);
+      setTimeout(() => {
+        setIsDrawMode(null);
+      }, 1500);
     } catch (err) {
       alert("Error saving grid: " + err.message);
     }

@@ -193,22 +193,26 @@ export const autoGeneratePlotsForBoundary = (farmBoundaryGeoJSON, lengthFt, widt
         for (const f of farmFeatures) {
           if (added) break;
           if (f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')) {
-            if (booleanIntersects(boxGeoJSON, f)) {
-              const intersection = intersect(turf.featureCollection([boxGeoJSON, f]));
-              if (intersection) {
-                if (keepInside) {
-                  const intersectArea = area(intersection);
-                  const originalArea = area(boxGeoJSON);
-                  if (intersectArea > originalArea * 0.99) {
-                    const acres = Math.round((originalArea / 4046.8564224) * 100) / 100;
-                    if (acres > 0.05) { plots.push({ geojson: boxGeoJSON.geometry, acres }); added = true; }
+            try {
+              if (booleanIntersects(boxGeoJSON, f)) {
+                const intersection = intersect(turf.featureCollection([boxGeoJSON, f]));
+                if (intersection) {
+                  if (keepInside) {
+                    const intersectArea = area(intersection);
+                    const originalArea = area(boxGeoJSON);
+                    if (intersectArea > originalArea * 0.99) {
+                      const acres = Math.round((originalArea / 4046.8564224) * 100) / 100;
+                      if (acres > 0.05) { plots.push({ geojson: boxGeoJSON.geometry, acres }); added = true; }
+                    }
+                  } else {
+                    const areaSqMeters = area(intersection);
+                    const acres = Math.round((areaSqMeters / 4046.8564224) * 100) / 100;
+                    if (acres > 0.05) { plots.push({ geojson: intersection.geometry, acres }); added = true; }
                   }
-                } else {
-                  const areaSqMeters = area(intersection);
-                  const acres = Math.round((areaSqMeters / 4046.8564224) * 100) / 100;
-                  if (acres > 0.05) { plots.push({ geojson: intersection.geometry, acres }); added = true; }
                 }
               }
+            } catch (err) {
+              // Ignore topological errors for this specific box and continue
             }
           }
         }
