@@ -2,5 +2,11 @@
   "buildCommand": "cd agripro-web && npm install && npm run build",
   "outputDirectory": "agripro-web/dist",
   "installCommand": "cd agripro-web && npm install",
-  "framework": "vite"
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }
