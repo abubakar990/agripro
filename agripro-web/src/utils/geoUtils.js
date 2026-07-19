@@ -295,12 +295,12 @@ export const TILE_LAYERS = {
   }
 };
 
-export const rotatePolygon90Degrees = (geoJSON) => {
+export const rotatePolygon = (geoJSON, angle = 90) => {
   if (!geoJSON || geoJSON.type !== 'Polygon') return geoJSON;
   
   try {
      const center = getPolygonCenter(geoJSONToLatLngs(geoJSON)[0]);
-     return transformRotate(geoJSON, 90, { pivot: [center[1], center[0]] }).geometry;
+     return transformRotate(geoJSON, angle, { pivot: [center[1], center[0]] }).geometry;
   } catch(e) {
      return geoJSON;
   }

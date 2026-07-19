@@ -4,13 +4,13 @@ import L from 'leaflet';
 import '@geoman-io/leaflet-geoman-free';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { calculateAcresFromLatLngs, layerToGeoJSON, geoJSONToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM, TILE_LAYERS, createIntersectedAcreBox, addPolygonToFeatureCollection, autoGeneratePlotsForBoundary, autoAdjustPlotsToBoundary, rotatePolygon90Degrees, getOverlapArea, mergePolygons } from '../../utils/geoUtils';
+import { calculateAcresFromLatLngs, layerToGeoJSON, geoJSONToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM, TILE_LAYERS, createIntersectedAcreBox, addPolygonToFeatureCollection, autoGeneratePlotsForBoundary, autoAdjustPlotsToBoundary, rotatePolygon, getOverlapArea, mergePolygons } from '../../utils/geoUtils';
 import { getPlotScore, getScoreColor, getScoreLabel } from '../../utils/perAcreCalc';
 import { formatPKR } from '../../utils/format';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
-import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconHandGrab, IconGridDots, IconCut, IconVectorTriangle } from '@tabler/icons-react';
+import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconHandGrab, IconGridDots, IconCut, IconVectorTriangle, IconList } from '@tabler/icons-react';
 
 const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, onPlotRedrawn, onPlotCut, mapRef }) => {
   const map = useMap();
@@ -189,6 +189,8 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const [gridPreviewPlots, setGridPreviewPlots] = useState([]);
   const [gridParams, setGridParams] = useState({ length_ft: 207, width_ft: 207, angle: 0, keepInside: false });
   const [selectedPlotIdsForMerge, setSelectedPlotIdsForMerge] = useState([]);
+  const [isPlotManagerOpen, setIsPlotManagerOpen] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState([]);
   
   // Geoman Vertex Adjustment States
   const [adjustingPlotId, setAdjustingPlotId] = useState(null);
@@ -585,12 +587,12 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     }
   };
 
-  const handleRotatePlot = async (plotId) => {
+  const handleRotatePlot = async (plotId, angle = 90) => {
     const plot = plots.find(p => p.id === plotId);
     if (!plot || !plot.boundary) return;
     
     try {
-      const rotatedGeoJSON = rotatePolygon90Degrees(plot.boundary);
+      const rotatedGeoJSON = rotatePolygon(plot.boundary, angle);
       await supabase.from('farm_plots').update({ boundary: rotatedGeoJSON }).eq('id', plotId);
     } catch (err) {
       alert('Error rotating plot: ' + err.message);
@@ -719,10 +721,20 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       const { error } = await supabase.from('farm_plots').delete().eq('id', plotId);
       if (error) throw error;
       if (selectedPlot?.id === plotId) setSelectedPlot(null);
-      alert('Plot deleted successfully.');
     } catch (err) {
       alert('Error deleting plot: ' + err.message);
     }
+  };
+
+  const handleBulkDelete = async () => {
+     if (bulkSelectedIds.length === 0) return;
+     if (!window.confirm(`Are you sure you want to delete ${bulkSelectedIds.length} plots?`)) return;
+     try {
+       await supabase.from('farm_plots').delete().in('id', bulkSelectedIds);
+       setBulkSelectedIds([]);
+     } catch (err) {
+       alert("Error deleting plots: " + err.message);
+     }
   };
 
   const handleAcreBoxClick = useCallback((latlng) => {
@@ -1265,6 +1277,13 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                 <IconLayersIntersect size={14} className="text-emerald-400"/> 
                 Mapped Plots ({plots.length})
               </span>
+              <button 
+                onClick={() => setIsPlotManagerOpen(true)}
+                className="text-xs flex items-center gap-1 text-slate-300 hover:text-emerald-400 transition-colors"
+                title="Open Bulk Plot Manager"
+              >
+                <IconList size={14}/> Manager
+              </button>
             </div>
             
             <div className="overflow-y-auto flex-1 p-2 space-y-2 custom-scrollbar">
@@ -1356,11 +1375,22 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                                 
                                 <div className="flex gap-2 justify-end mt-2">
                                   <button 
-                                    className="text-slate-400 hover:text-emerald-400 p-1.5 hover:bg-slate-800 rounded transition-colors" 
-                                    onClick={(e) => { e.stopPropagation(); handleRotatePlot(plot.id); }}
-                                    title="Rotate 90° (Horizontal/Vertical)"
+                                    className="text-slate-400 hover:text-emerald-400 p-1.5 hover:bg-slate-800 rounded transition-colors flex items-center gap-1" 
+                                    onClick={(e) => { e.stopPropagation(); handleRotatePlot(plot.id, 90); }}
+                                    title="Rotate 90°"
                                   >
-                                    <IconRotate size={16} />
+                                    <IconRotate size={16} /> <span className="text-[10px]">90°</span>
+                                  </button>
+                                  <button 
+                                    className="text-slate-400 hover:text-emerald-400 p-1.5 hover:bg-slate-800 rounded transition-colors flex items-center gap-1" 
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      const angle = window.prompt('Enter rotation angle (degrees):', '45');
+                                      if (angle && !isNaN(parseFloat(angle))) handleRotatePlot(plot.id, parseFloat(angle)); 
+                                    }}
+                                    title="Rotate Custom Angle"
+                                  >
+                                    <IconRotate size={16} /> <span className="text-[10px]">...</span>
                                   </button>
                                   <button 
                                     className={`p-1.5 rounded transition-colors ${draggingPlotId === plot.id ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-800'}`} 
@@ -1476,6 +1506,90 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
             <Button type="submit" variant="primary" className="flex-1">Save Dimension</Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Bulk Plot Manager Modal */}
+      <Modal isOpen={isPlotManagerOpen} onClose={() => setIsPlotManagerOpen(false)} title="Plot Manager" size="4xl">
+        <div className="p-4">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-bold text-slate-200 text-lg">Manage {plots.length} Plots</h3>
+            {bulkSelectedIds.length > 0 && (
+              <button 
+                className="dji-button-danger flex items-center gap-1"
+                onClick={handleBulkDelete}
+              >
+                <IconTrash size={16} /> Delete Selected ({bulkSelectedIds.length})
+              </button>
+            )}
+          </div>
+          
+          <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+            <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-800 sticky top-0 z-10">
+                  <tr>
+                    <th className="p-3 w-12 text-center">
+                      <input 
+                        type="checkbox" 
+                        className="accent-emerald-500"
+                        checked={plots.length > 0 && bulkSelectedIds.length === plots.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setBulkSelectedIds(plots.map(p => p.id));
+                          } else {
+                            setBulkSelectedIds([]);
+                          }
+                        }}
+                      />
+                    </th>
+                    <th className="p-3 text-slate-300 font-bold uppercase tracking-wider text-xs">Name</th>
+                    <th className="p-3 text-slate-300 font-bold uppercase tracking-wider text-xs">Area (Acres)</th>
+                    <th className="p-3 text-slate-300 font-bold uppercase tracking-wider text-xs">Soil Quality</th>
+                    <th className="p-3 text-slate-300 font-bold uppercase tracking-wider text-xs">Score</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50">
+                  {plots.map(plot => {
+                    const score = getPlotScore(plot.id, { expenses, revenue, cropCycles, farmPlots: plots, farms });
+                    return (
+                      <tr key={plot.id} className="hover:bg-slate-800/50 transition-colors">
+                        <td className="p-3 text-center">
+                          <input 
+                            type="checkbox" 
+                            className="accent-emerald-500"
+                            checked={bulkSelectedIds.includes(plot.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setBulkSelectedIds([...bulkSelectedIds, plot.id]);
+                              else setBulkSelectedIds(bulkSelectedIds.filter(id => id !== plot.id));
+                            }}
+                          />
+                        </td>
+                        <td className="p-3 font-medium text-emerald-400">{plot.name}</td>
+                        <td className="p-3 text-slate-300">{parseFloat(plot.area_acres || 0).toFixed(2)}</td>
+                        <td className="p-3 text-slate-300">{plot.soil_quality || 'Unknown'}</td>
+                        <td className="p-3">
+                          {score !== null ? (
+                            <span className="font-bold text-xs" style={{ color: getScoreColor(score) }}>
+                              {score}/100
+                            </span>
+                          ) : <span className="text-slate-500 italic text-xs">No Data</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {plots.length === 0 && (
+                    <tr>
+                      <td colSpan="5" className="p-6 text-center text-slate-500 italic">No plots available to manage.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button className="dji-button" onClick={() => setIsPlotManagerOpen(false)}>Close</button>
+          </div>
+        </div>
       </Modal>
 
     </div>
