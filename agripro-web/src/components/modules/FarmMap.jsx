@@ -187,7 +187,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const [isDrawMode, setIsDrawMode] = useState(null);
   const [redrawPlotId, setRedrawPlotId] = useState(null);
   const [gridPreviewPlots, setGridPreviewPlots] = useState([]);
-  const [gridParams, setGridParams] = useState({ length_ft: 207, width_ft: 207, angle: 0, keepInside: false });
+  const [gridParams, setGridParams] = useState({ length_ft: 207, width_ft: 207, angle: 0, keepInside: false, offsetX: 0, offsetY: 0 });
   const [selectedPlotIdsForMerge, setSelectedPlotIdsForMerge] = useState([]);
   const [isPlotManagerOpen, setIsPlotManagerOpen] = useState(false);
   const [bulkSelectedIds, setBulkSelectedIds] = useState([]);
@@ -262,7 +262,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   useEffect(() => {
     if (isDrawMode === 'grid_preview' && farm?.boundary) {
       const timer = setTimeout(() => {
-         const preview = autoGeneratePlotsForBoundary(farm.boundary, parseFloat(gridParams.length_ft) || 100, parseFloat(gridParams.width_ft) || 100, parseFloat(gridParams.angle) || 0, gridParams.keepInside);
+         const preview = autoGeneratePlotsForBoundary(farm.boundary, parseFloat(gridParams.length_ft) || 100, parseFloat(gridParams.width_ft) || 100, parseFloat(gridParams.angle) || 0, gridParams.keepInside, parseFloat(gridParams.offsetX) || 0, parseFloat(gridParams.offsetY) || 0);
          setGridPreviewPlots(preview);
       }, 100); // debounce slightly
       return () => clearTimeout(timer);
@@ -977,6 +977,21 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Length (ft)</label>
                 <input type="number" className="dji-input" value={gridParams.length_ft} onChange={e => setGridParams({...gridParams, length_ft: e.target.value})} />
               </div>
+              
+              <div className="flex flex-col gap-1 col-span-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">X Offset (Left/Right) ({gridParams.offsetX}ft)</label>
+                </div>
+                <input type="range" min="-1000" max="1000" className="w-full accent-emerald-500" value={gridParams.offsetX} onChange={e => setGridParams({...gridParams, offsetX: e.target.value})} />
+              </div>
+
+              <div className="flex flex-col gap-1 col-span-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Y Offset (Up/Down) ({gridParams.offsetY}ft)</label>
+                </div>
+                <input type="range" min="-1000" max="1000" className="w-full accent-emerald-500" value={gridParams.offsetY} onChange={e => setGridParams({...gridParams, offsetY: e.target.value})} />
+              </div>
+
               <div className="flex flex-col gap-1 col-span-2">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Rotation Angle ({gridParams.angle}°)</label>
                 <input type="range" min="0" max="360" className="w-full accent-emerald-500" value={gridParams.angle} onChange={e => setGridParams({...gridParams, angle: e.target.value})} />

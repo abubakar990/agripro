@@ -145,11 +145,11 @@ export const addPolygonToFeatureCollection = (existingGeoJSON, newPolygonGeoJSON
   }
 };
 
-export const autoGeneratePlotsForBoundary = (farmBoundaryGeoJSON, lengthFt, widthFt, angleDegrees = 0, keepInside = false) => {
+export const autoGeneratePlotsForBoundary = (farmBoundaryGeoJSON, lengthFt, widthFt, angleDegrees = 0, keepInside = false, offsetXFt = 0, offsetYFt = 0) => {
   if (!farmBoundaryGeoJSON || !lengthFt || !widthFt) return [];
   
   try {
-    const farmFeature = turf.feature(farmBoundaryGeoJSON);
+    const farmFeature = farmBoundaryGeoJSON.type === 'FeatureCollection' ? farmBoundaryGeoJSON : (farmBoundaryGeoJSON.type === 'Feature' ? farmBoundaryGeoJSON : turf.feature(farmBoundaryGeoJSON));
     const [farmMinLng, farmMinLat, farmMaxLng, farmMaxLat] = bbox(farmFeature);
     const pivot = [(farmMinLng + farmMaxLng) / 2, (farmMinLat + farmMaxLat) / 2];
     
@@ -171,15 +171,17 @@ export const autoGeneratePlotsForBoundary = (farmBoundaryGeoJSON, lengthFt, widt
     const expandedMaxLat = farmMaxLat + (height * expandFactor);
     
     const plots = [];
+    const offsetLat = (offsetYFt || 0) * latOffsetPerFt;
+    const offsetLng = (offsetXFt || 0) * lngOffsetPerFt;
     
     for (let lat = expandedMinLat; lat < expandedMaxLat; lat += stepLat) {
       for (let lng = expandedMinLng; lng < expandedMaxLng; lng += stepLng) {
         let boxGeoJSON = turf.polygon([[
-          [lng, lat],
-          [lng + stepLng, lat],
-          [lng + stepLng, lat + stepLat],
-          [lng, lat + stepLat],
-          [lng, lat] // close
+          [lng + offsetLng, lat + offsetLat],
+          [lng + stepLng + offsetLng, lat + offsetLat],
+          [lng + stepLng + offsetLng, lat + stepLat + offsetLat],
+          [lng + offsetLng, lat + stepLat + offsetLat],
+          [lng + offsetLng, lat + offsetLat] // close
         ]]);
         
         if (angleDegrees !== 0) {
