@@ -389,17 +389,32 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     }
   };
 
-  const handleDeleteFarmBoundary = async () => {
-    if (!window.confirm("Are you sure you want to delete the farm boundary? The plots inside will remain.")) return;
+  const handleDeleteSpecificBoundary = async (indexToDelete) => {
+    if (!window.confirm("Are you sure you want to delete this specific boundary area?")) return;
     try {
+      let newBoundary = null;
+      let newArea = 0;
+      
+      const features = farm.boundary.type === 'FeatureCollection' ? farm.boundary.features : [{ geometry: farm.boundary }];
+      const remainingFeatures = features.filter((_, idx) => idx !== indexToDelete);
+      
+      if (remainingFeatures.length > 0) {
+        newBoundary = remainingFeatures.length === 1 ? remainingFeatures[0].geometry : { type: 'FeatureCollection', features: remainingFeatures };
+        
+        remainingFeatures.forEach(f => {
+          newArea += calculateAcresFromLatLngs(geoJSONToLatLngs(f.geometry)[0]);
+        });
+      }
+      
       const { error } = await supabase.from('farms').update({
-        boundary: null,
-        area_acres: null,
+        boundary: newBoundary,
+        area_acres: newArea || null,
       }).eq('id', numericFarmId);
+      
       if (error) throw error;
-      alert('Farm boundary deleted.');
+      alert('Boundary area deleted.');
     } catch (err) {
-      alert('Error: ' + err.message);
+      alert('Error deleting boundary: ' + err.message);
     }
   };
 
@@ -707,14 +722,53 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                       <Button variant="outline" className="flex-1 px-2 text-xs" onClick={startDrawPlot} disabled={!!isDrawMode}>
                         <IconPlus size={14} /> Draw Plot
                       </Button>
-                      <Button variant="outline" className="px-2" onClick={() => setAdjustingFarmBoundary(true)} title="Adjust Farm Boundary">
-                        <IconDragDrop size={16} className="text-primary"/>
-                      </Button>
-                      <Button variant="outline" className="px-2 text-expense border-expense/30 hover:bg-expense/10" onClick={handleDeleteFarmBoundary} title="Delete Farm Boundary">
-                        <IconTrash size={16} />
+                      <Button variant="outline" className="px-2 flex-1" onClick={() => setAdjustingFarmBoundary(true)} title="Adjust Farm Boundary">
+                        <IconDragDrop size={16} className="text-primary mr-1"/> Adjust All
                       </Button>
                     </div>
                   )}
+                  
+                  {farm.boundary && (
+                    <div className="flex flex-col gap-2 mt-2 border-t border-border pt-2">
+                      <p className="text-xs font-bold text-text-secondary uppercase mb-1">Farm Boundaries ({farm.boundary.type === 'FeatureCollection' ? farm.boundary.features.length : 1})</p>
+                      {(farm.boundary.type === 'FeatureCollection' ? farm.boundary.features : [{ geometry: farm.boundary }]).map((f, idx) => {
+                        const acres = calculateAcresFromLatLngs(geoJSONToLatLngs(f.geometry)[0]);
+                        return (
+                          <div 
+                            key={idx} 
+                            className="flex justify-between items-center bg-bg-alt p-2 rounded border border-border text-xs cursor-pointer hover:border-primary transition-colors"
+                            onClick={() => {
+                              if (mapRef.current) {
+                                try {
+                                  const bounds = L.geoJSON({ type: 'Feature', geometry: f.geometry }).getBounds();
+                                  if (bounds.isValid()) mapRef.current.fitBounds(bounds, { padding: [30, 30] });
+                                } catch(e) {}
+                              }
+                            }}
+                            title="Click to zoom"
+                          >
+                            <div className="flex items-center gap-2">
+                              <IconMapPin size={12} className="text-primary"/>
+                              <span className="font-bold">Boundary {idx + 1}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-text-muted">{acres.toFixed(2)} Ac</span>
+                              {!adjustingFarmBoundary && (
+                                 <button 
+                                   className="text-expense hover:bg-expense/10 p-1 rounded transition-colors" 
+                                   onClick={(e) => { e.stopPropagation(); handleDeleteSpecificBoundary(idx); }}
+                                   title="Delete this boundary"
+                                 >
+                                   <IconTrash size={14} />
+                                 </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  
                   
                   <div className="border border-border rounded-lg p-3 bg-bg-alt">
                     <div className="text-xs font-bold text-text-secondary uppercase mb-2 flex justify-between items-center">
