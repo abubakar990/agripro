@@ -125,7 +125,7 @@ export const addPolygonToFeatureCollection = (existingGeoJSON, newPolygonGeoJSON
   const newFeature = turf.feature(newPolygonGeoJSON);
   
   if (!existingGeoJSON) {
-    return turf.featureCollection([newFeature]).geometry;
+    return turf.featureCollection([newFeature]);
   }
   
   try {
@@ -137,9 +137,9 @@ export const addPolygonToFeatureCollection = (existingGeoJSON, newPolygonGeoJSON
     } else {
       features = [turf.feature(existingGeoJSON), newFeature];
     }
-    return turf.featureCollection(features).geometry;
+    return turf.featureCollection(features);
   } catch (e) {
-    return turf.featureCollection([newFeature]).geometry;
+    return turf.featureCollection([newFeature]);
   }
 };
 
