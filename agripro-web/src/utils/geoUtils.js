@@ -327,7 +327,8 @@ export const mergePolygons = (geoJSONs) => {
     let merged = turf.feature(geoJSONs[0]);
     for (let i = 1; i < geoJSONs.length; i++) {
       const f2 = turf.feature(geoJSONs[i]);
-      merged = union(turf.featureCollection([merged, f2]));
+      const result = union(merged, f2);
+      if (result) merged = result;
     }
     return merged.geometry;
   } catch (e) {
