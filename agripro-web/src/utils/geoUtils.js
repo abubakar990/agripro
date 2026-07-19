@@ -150,6 +150,7 @@ export const autoGeneratePlotsForBoundary = (farmBoundaryGeoJSON, lengthFt, widt
   
   try {
     const farmFeature = farmBoundaryGeoJSON.type === 'FeatureCollection' ? farmBoundaryGeoJSON : (farmBoundaryGeoJSON.type === 'Feature' ? farmBoundaryGeoJSON : turf.feature(farmBoundaryGeoJSON));
+    const farmFeatures = farmFeature.type === 'FeatureCollection' ? farmFeature.features : [farmFeature];
     const [farmMinLng, farmMinLat, farmMaxLng, farmMaxLat] = bbox(farmFeature);
     const pivot = [(farmMinLng + farmMaxLng) / 2, (farmMinLat + farmMaxLat) / 2];
     
@@ -188,24 +189,27 @@ export const autoGeneratePlotsForBoundary = (farmBoundaryGeoJSON, lengthFt, widt
            boxGeoJSON = transformRotate(boxGeoJSON, angleDegrees, { pivot });
         }
         
-        if (booleanIntersects(boxGeoJSON, farmFeature)) {
-          if (keepInside) {
-             const intersection = intersect(turf.featureCollection([boxGeoJSON, farmFeature]));
-             if (intersection) {
-                const intersectArea = area(intersection);
-                const originalArea = area(boxGeoJSON);
-                if (intersectArea > originalArea * 0.99) {
-                   const acres = Math.round((originalArea / 4046.8564224) * 100) / 100;
-                   if (acres > 0.05) plots.push({ geojson: boxGeoJSON.geometry, acres });
+        let added = false;
+        for (const f of farmFeatures) {
+          if (added) break;
+          if (f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')) {
+            if (booleanIntersects(boxGeoJSON, f)) {
+              const intersection = intersect(turf.featureCollection([boxGeoJSON, f]));
+              if (intersection) {
+                if (keepInside) {
+                  const intersectArea = area(intersection);
+                  const originalArea = area(boxGeoJSON);
+                  if (intersectArea > originalArea * 0.99) {
+                    const acres = Math.round((originalArea / 4046.8564224) * 100) / 100;
+                    if (acres > 0.05) { plots.push({ geojson: boxGeoJSON.geometry, acres }); added = true; }
+                  }
+                } else {
+                  const areaSqMeters = area(intersection);
+                  const acres = Math.round((areaSqMeters / 4046.8564224) * 100) / 100;
+                  if (acres > 0.05) { plots.push({ geojson: intersection.geometry, acres }); added = true; }
                 }
-             }
-          } else {
-             const intersection = intersect(turf.featureCollection([boxGeoJSON, farmFeature]));
-             if (intersection) {
-               const areaSqMeters = area(intersection);
-               const acres = Math.round((areaSqMeters / 4046.8564224) * 100) / 100;
-               if (acres > 0.05) plots.push({ geojson: intersection.geometry, acres });
-             }
+              }
+            }
           }
         }
       }
