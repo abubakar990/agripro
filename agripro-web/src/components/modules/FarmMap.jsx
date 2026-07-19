@@ -170,6 +170,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   // Geoman Vertex Adjustment States
   const [adjustingPlotId, setAdjustingPlotId] = useState(null);
   const [adjustingFarmBoundary, setAdjustingFarmBoundary] = useState(false);
+  const [dynamicAreaAcres, setDynamicAreaAcres] = useState(null);
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
@@ -203,24 +204,51 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     if (farmLayerRef.current) {
       if (adjustingFarmBoundary) {
         farmLayerRef.current.pm.enable({ allowSelfIntersection: false, preventMarkerRemoval: false });
+        const updateArea = () => {
+          try {
+            const acres = calculateAcresFromLatLngs(farmLayerRef.current.getLatLngs()[0]);
+            setDynamicAreaAcres(acres);
+          } catch(e) {}
+        };
+        farmLayerRef.current.on('pm:markerdrag', updateArea);
+        farmLayerRef.current.on('pm:edit', updateArea);
+        updateArea();
       } else {
         farmLayerRef.current.pm.disable();
+        farmLayerRef.current.off('pm:markerdrag');
+        farmLayerRef.current.off('pm:edit');
+        if (!adjustingPlotId) setDynamicAreaAcres(null);
       }
     }
-  }, [adjustingFarmBoundary, farm?.boundary]);
+  }, [adjustingFarmBoundary, farm?.boundary, adjustingPlotId]);
 
   useEffect(() => {
     Object.values(plotLayersRef.current).forEach(layer => {
-      if (layer && layer.pm) layer.pm.disable();
+      if (layer && layer.pm) {
+        layer.pm.disable();
+        layer.off('pm:markerdrag');
+        layer.off('pm:edit');
+      }
     });
 
     if (adjustingPlotId && plotLayersRef.current[adjustingPlotId]) {
       const layer = plotLayersRef.current[adjustingPlotId];
       if (layer && layer.pm) {
         layer.pm.enable({ allowSelfIntersection: false, preventMarkerRemoval: false });
+        const updateArea = () => {
+          try {
+            const acres = calculateAcresFromLatLngs(layer.getLatLngs()[0]);
+            setDynamicAreaAcres(acres);
+          } catch(e) {}
+        };
+        layer.on('pm:markerdrag', updateArea);
+        layer.on('pm:edit', updateArea);
+        updateArea();
       }
+    } else if (!adjustingFarmBoundary) {
+      setDynamicAreaAcres(null);
     }
-  }, [adjustingPlotId, plots]);
+  }, [adjustingPlotId, plots, adjustingFarmBoundary]);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -266,6 +294,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     setRedrawPlotId(null);
     setAdjustingPlotId(null);
     setAdjustingFarmBoundary(false);
+    setDynamicAreaAcres(null);
     if (mapRef.current) mapRef.current.pm.disableDraw();
   };
 
@@ -583,7 +612,11 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
               <h3 className="font-bold text-lg text-text-primary mb-1">{farm.name}</h3>
               <div className="flex justify-between items-center text-sm mb-3 pb-3 border-b border-border">
                 <span className="text-text-muted flex items-center gap-1"><IconMapPin size={14}/> Area</span>
-                <span className="font-bold text-text-primary">{totalFarmAcres > 0 ? parseFloat(totalFarmAcres).toFixed(2) : '—'} Acres</span>
+                <span className="font-bold text-text-primary">
+                  {adjustingFarmBoundary && dynamicAreaAcres !== null 
+                    ? <span className="text-primary">{dynamicAreaAcres.toFixed(2)} Ac (Live)</span>
+                    : `${totalFarmAcres > 0 ? parseFloat(totalFarmAcres).toFixed(2) : '—'} Ac`}
+                </span>
               </div>
               
               {!farm.boundary ? (
@@ -717,7 +750,10 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                           <div className="mt-3 pt-3 border-t border-border space-y-2">
                             {isAdjustingThis ? (
                               <div className="bg-primary/10 border border-primary/30 p-3 rounded-lg flex flex-col gap-2 my-2">
-                                <p className="text-xs font-bold text-primary">Adjusting Plot</p>
+                                <div className="flex justify-between items-center">
+                                  <p className="text-xs font-bold text-primary">Adjusting Plot</p>
+                                  <p className="text-xs font-bold text-primary">{dynamicAreaAcres !== null ? dynamicAreaAcres.toFixed(2) : plotArea.toFixed(2)} Ac</p>
+                                </div>
                                 <p className="text-xs text-text-muted">Drag the white markers on the map to adjust the plot shape.</p>
                                 <div className="flex gap-2">
                                   <Button variant="outline" className="flex-1 py-1 h-8 text-xs" onClick={(e) => { e.stopPropagation(); setAdjustingPlotId(null); }}>Cancel</Button>
