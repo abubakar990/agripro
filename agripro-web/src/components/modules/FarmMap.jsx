@@ -10,7 +10,7 @@ import { formatPKR } from '../../utils/format';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
-import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconHandGrab } from '@tabler/icons-react';
+import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconHandGrab, IconGridDots } from '@tabler/icons-react';
 
 const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, onPlotRedrawn, mapRef }) => {
   const map = useMap();
@@ -554,6 +554,51 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     }
   };
 
+  const handleAutoFillFarm = async () => {
+    if (!selectedPresetId) {
+      alert("Please select an Acre Dimension first!");
+      return;
+    }
+    const preset = acrePresets.find(p => p.id === selectedPresetId);
+    if (!preset) return;
+    
+    if (plots.length > 0) {
+      const confirmOverwrite = window.confirm("This will erase all current plots and auto-fill the entire farm boundary. Proceed?");
+      if (!confirmOverwrite) return;
+    }
+    
+    try {
+      const generatedPlots = autoGeneratePlotsForBoundary(farm.boundary, preset.length_ft, preset.width_ft);
+      
+      if (generatedPlots.length === 0) {
+         alert('Could not generate any plots. Boundary might be too small or irregular for this dimension.');
+         return;
+      }
+      
+      // Delete existing plots
+      if (plots.length > 0) {
+         await supabase.from('farm_plots').delete().eq('farm_id', numericFarmId);
+      }
+      
+      // Insert new plots
+      const plotsToInsert = generatedPlots.map((gp, idx) => ({
+         farm_id: numericFarmId,
+         name: `Auto Plot ${idx + 1}`,
+         area_acres: gp.acres,
+         boundary: gp.geojson,
+         soil_type: 'Loamy',
+         soil_quality: 'Good'
+      }));
+      
+      const { error } = await supabase.from('farm_plots').insert(plotsToInsert);
+      if (error) throw error;
+      
+      alert(`Successfully generated ${plotsToInsert.length} plots!`);
+    } catch (err) {
+      alert("Error auto-filling farm: " + err.message);
+    }
+  };
+
   const handleDeletePlot = async (plotId) => {
     if (!window.confirm("Are you sure you want to completely delete this plot?")) return;
     try {
@@ -812,6 +857,16 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                   </button>
                 )}
               </div>
+              {farm.boundary && (
+                <button 
+                  className="dji-button-primary w-full mt-2 flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white" 
+                  onClick={handleAutoFillFarm} 
+                  disabled={!!isDrawMode || !selectedPresetId} 
+                  title="Auto-fill farm with grid"
+                >
+                  <IconGridDots size={16} /> Auto-Fill Farm
+                </button>
+              )}
             </div>
 
             {!farm.boundary ? (
