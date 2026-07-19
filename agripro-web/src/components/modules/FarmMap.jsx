@@ -10,7 +10,7 @@ import { formatPKR } from '../../utils/format';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
-import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit } from '@tabler/icons-react';
+import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck } from '@tabler/icons-react';
 
 const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, onPlotRedrawn, mapRef }) => {
   const map = useMap();
@@ -158,11 +158,19 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const { farmId } = useParams();
   const navigate = useNavigate();
   const mapRef = useRef(null);
+  const plotLayersRef = useRef({});
+  const farmLayerRef = useRef(null);
+  
   const [mapType, setMapType] = useState('hybrid');
   const [selectedPlot, setSelectedPlot] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDrawMode, setIsDrawMode] = useState(null);
   const [redrawPlotId, setRedrawPlotId] = useState(null);
+  
+  // Geoman Vertex Adjustment States
+  const [adjustingPlotId, setAdjustingPlotId] = useState(null);
+  const [adjustingFarmBoundary, setAdjustingFarmBoundary] = useState(false);
+  
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
   const [isAcreModalOpen, setIsAcreModalOpen] = useState(false);
@@ -189,6 +197,30 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     if (farm?.latitude && farm?.longitude) return [parseFloat(farm.latitude), parseFloat(farm.longitude)];
     return DEFAULT_CENTER;
   }, [farm]);
+
+  // Manage Geoman Edit Mode
+  useEffect(() => {
+    if (farmLayerRef.current) {
+      if (adjustingFarmBoundary) {
+        farmLayerRef.current.pm.enable({ allowSelfIntersection: false, preventMarkerRemoval: false });
+      } else {
+        farmLayerRef.current.pm.disable();
+      }
+    }
+  }, [adjustingFarmBoundary, farm?.boundary]);
+
+  useEffect(() => {
+    Object.values(plotLayersRef.current).forEach(layer => {
+      if (layer && layer.pm) layer.pm.disable();
+    });
+
+    if (adjustingPlotId && plotLayersRef.current[adjustingPlotId]) {
+      const layer = plotLayersRef.current[adjustingPlotId];
+      if (layer && layer.pm) {
+        layer.pm.enable({ allowSelfIntersection: false, preventMarkerRemoval: false });
+      }
+    }
+  }, [adjustingPlotId, plots]);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -232,6 +264,8 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const cancelDraw = () => {
     setIsDrawMode(null);
     setRedrawPlotId(null);
+    setAdjustingPlotId(null);
+    setAdjustingFarmBoundary(false);
     if (mapRef.current) mapRef.current.pm.disableDraw();
   };
 
@@ -250,6 +284,31 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       alert('Error saving farm boundary: ' + err.message);
     }
   }, [numericFarmId]);
+
+  const handleSaveFarmAdjustment = async () => {
+    if (!farmLayerRef.current) return;
+    try {
+      const layer = farmLayerRef.current;
+      const geojson = layerToGeoJSON(layer);
+      const latLngs = layer.getLatLngs()[0];
+      const acres = calculateAcresFromLatLngs(latLngs);
+      const bounds = layer.getBounds();
+      const center = bounds.getCenter();
+
+      const { error } = await supabase.from('farms').update({
+        boundary: geojson,
+        area_acres: acres,
+        latitude: center.lat,
+        longitude: center.lng
+      }).eq('id', numericFarmId);
+      if (error) throw error;
+      
+      setAdjustingFarmBoundary(false);
+      alert('Farm boundary adjustments saved!');
+    } catch (err) {
+      alert('Error saving boundary: ' + err.message);
+    }
+  };
 
   const handleDeleteFarmBoundary = async () => {
     if (!window.confirm("Are you sure you want to delete the farm boundary? The plots inside will remain.")) return;
@@ -286,6 +345,26 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       alert('Error updating boundary: ' + err.message);
     }
   }, [redrawPlotId]);
+
+  const handleSavePlotAdjustment = async () => {
+    if (!adjustingPlotId || !plotLayersRef.current[adjustingPlotId]) return;
+    try {
+      const layer = plotLayersRef.current[adjustingPlotId];
+      const geojson = layerToGeoJSON(layer);
+      const acres = calculateAcresFromLatLngs(layer.getLatLngs()[0]);
+      
+      const { error } = await supabase.from('farm_plots').update({
+        boundary: geojson,
+        area_acres: acres
+      }).eq('id', adjustingPlotId);
+      
+      if (error) throw error;
+      setAdjustingPlotId(null);
+      alert('Plot adjustments saved!');
+    } catch (err) {
+      alert('Error saving adjustments: ' + err.message);
+    }
+  };
 
   const handleDeletePlot = async (plotId) => {
     if (!window.confirm("Are you sure you want to completely delete this plot?")) return;
@@ -456,7 +535,11 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                 const positions = geoJSONToLatLngs(farm.boundary);
                 if (positions.length > 0) {
                   return (
-                    <Polygon positions={positions} pathOptions={{ color: '#1a4d2e', weight: 3, dashArray: '5, 10', fillOpacity: 0.05, fillColor: '#1a4d2e' }} />
+                    <Polygon 
+                      positions={positions} 
+                      pathOptions={{ color: '#1a4d2e', weight: 3, dashArray: '5, 10', fillOpacity: 0.05, fillColor: '#1a4d2e' }}
+                      ref={(ref) => { farmLayerRef.current = ref; }}
+                    />
                   );
                 }
               } catch (e) {}
@@ -477,6 +560,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                     positions={positions}
                     pathOptions={{ color: color, weight: 2, fillColor: color, fillOpacity: selectedPlot?.id === plot.id ? 0.6 : 0.35 }}
                     eventHandlers={{ click: () => { setSelectedPlot(plot); if (!isSidebarOpen) setIsSidebarOpen(true); } }}
+                    ref={(ref) => { if (ref) { plotLayersRef.current[plot.id] = ref; } }}
                   >
                     <Popup>
                       <div className="font-sans">
@@ -508,14 +592,31 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                 </Button>
               ) : (
                 <div className="flex flex-col gap-3">
-                  <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1" onClick={startDrawPlot} disabled={!!isDrawMode}>
-                      <IconPlus size={16} /> Draw Plot
-                    </Button>
-                    <Button variant="outline" className="text-expense border-expense/30 hover:bg-expense/10" onClick={handleDeleteFarmBoundary} title="Delete Farm Boundary">
-                      <IconTrash size={16} />
-                    </Button>
-                  </div>
+                  
+                  {adjustingFarmBoundary ? (
+                    <div className="bg-primary/10 border border-primary/30 p-3 rounded-lg flex flex-col gap-2">
+                      <p className="text-xs font-bold text-primary">Adjusting Boundary</p>
+                      <p className="text-xs text-text-muted">Drag the white markers on the map to adjust the farm shape.</p>
+                      <div className="flex gap-2">
+                        <Button variant="outline" className="flex-1 py-1 h-8 text-xs" onClick={() => setAdjustingFarmBoundary(false)}>Cancel</Button>
+                        <Button variant="primary" className="flex-1 py-1 h-8 text-xs bg-primary text-white" onClick={handleSaveFarmAdjustment}>
+                          <IconCheck size={14} className="mr-1"/> Save
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="flex-1" onClick={startDrawPlot} disabled={!!isDrawMode}>
+                        <IconPlus size={16} /> Draw Plot
+                      </Button>
+                      <Button variant="outline" className="px-2" onClick={() => setAdjustingFarmBoundary(true)} title="Adjust Farm Boundary">
+                        <IconDragDrop size={16} className="text-primary"/>
+                      </Button>
+                      <Button variant="outline" className="px-2 text-expense border-expense/30 hover:bg-expense/10" onClick={handleDeleteFarmBoundary} title="Delete Farm Boundary">
+                        <IconTrash size={16} />
+                      </Button>
+                    </div>
+                  )}
                   
                   <div className="border border-border rounded-lg p-3 bg-bg-alt">
                     <div className="text-xs font-bold text-text-secondary uppercase mb-2 flex justify-between items-center">
@@ -578,6 +679,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                     const activeCycle = cropCycles.find(c => c.plot_id === plot.id && c.status !== 'Harvested' && c.status !== 'Failed');
                     const score = getPlotScore(plot.id, { expenses, revenue, cropCycles, farmPlots: plots, farms });
                     const isSelected = selectedPlot?.id === plot.id;
+                    const isAdjustingThis = adjustingPlotId === plot.id;
                     const plotExpenses = expenses.filter(e => e.plot_id === plot.id);
                     const plotRevenue = revenue.filter(r => r.plot_id === plot.id);
                     const totalExp = plotExpenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
@@ -613,29 +715,47 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                         
                         {isSelected && (
                           <div className="mt-3 pt-3 border-t border-border space-y-2">
-                            <div className="flex justify-between text-xs">
-                              <span className="text-text-muted">Total Expense</span>
-                              <span className="font-medium text-expense">{formatPKR(totalExp)}</span>
-                            </div>
-                            <div className="flex justify-between text-xs">
-                              <span className="text-text-muted">Total Revenue</span>
-                              <span className="font-medium text-revenue">{formatPKR(totalRev)}</span>
-                            </div>
-                            <div className="flex justify-between text-xs">
-                              <span className="text-text-muted">Profit</span>
-                              <span className={`font-bold ${totalRev - totalExp >= 0 ? 'text-revenue' : 'text-expense'}`}>
-                                {formatPKR(totalRev - totalExp)}
-                              </span>
-                            </div>
-                            
-                            <div className="flex gap-2 pt-2 border-t border-border mt-2">
-                              <Button variant="outline" className="flex-1 py-1 text-xs h-7" onClick={(e) => { e.stopPropagation(); startRedrawPlot(plot.id); }}>
-                                <IconEdit size={14} className="mr-1" /> Redraw
-                              </Button>
-                              <Button variant="outline" className="flex-1 py-1 text-xs h-7 text-expense border-expense/30 hover:bg-expense/10" onClick={(e) => { e.stopPropagation(); handleDeletePlot(plot.id); }}>
-                                <IconTrash size={14} className="mr-1" /> Delete
-                              </Button>
-                            </div>
+                            {isAdjustingThis ? (
+                              <div className="bg-primary/10 border border-primary/30 p-3 rounded-lg flex flex-col gap-2 my-2">
+                                <p className="text-xs font-bold text-primary">Adjusting Plot</p>
+                                <p className="text-xs text-text-muted">Drag the white markers on the map to adjust the plot shape.</p>
+                                <div className="flex gap-2">
+                                  <Button variant="outline" className="flex-1 py-1 h-8 text-xs" onClick={(e) => { e.stopPropagation(); setAdjustingPlotId(null); }}>Cancel</Button>
+                                  <Button variant="primary" className="flex-1 py-1 h-8 text-xs bg-primary text-white" onClick={(e) => { e.stopPropagation(); handleSavePlotAdjustment(); }}>
+                                    <IconCheck size={14} className="mr-1"/> Save
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-text-muted">Total Expense</span>
+                                  <span className="font-medium text-expense">{formatPKR(totalExp)}</span>
+                                </div>
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-text-muted">Total Revenue</span>
+                                  <span className="font-medium text-revenue">{formatPKR(totalRev)}</span>
+                                </div>
+                                <div className="flex justify-between text-xs">
+                                  <span className="text-text-muted">Profit</span>
+                                  <span className={`font-bold ${totalRev - totalExp >= 0 ? 'text-revenue' : 'text-expense'}`}>
+                                    {formatPKR(totalRev - totalExp)}
+                                  </span>
+                                </div>
+                                
+                                <div className="flex gap-2 pt-2 border-t border-border mt-2">
+                                  <Button variant="outline" className="flex-1 py-1 text-xs h-7" onClick={(e) => { e.stopPropagation(); startRedrawPlot(plot.id); }} title="Redraw completely">
+                                    <IconEdit size={14} /> Redraw
+                                  </Button>
+                                  <Button variant="outline" className="flex-1 py-1 text-xs h-7" onClick={(e) => { e.stopPropagation(); setAdjustingPlotId(plot.id); }} title="Drag vertices">
+                                    <IconDragDrop size={14} /> Adjust
+                                  </Button>
+                                  <Button variant="outline" className="px-2 py-1 text-xs h-7 text-expense border-expense/30 hover:bg-expense/10" onClick={(e) => { e.stopPropagation(); handleDeletePlot(plot.id); }}>
+                                    <IconTrash size={14} />
+                                  </Button>
+                                </div>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
