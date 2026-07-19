@@ -9,6 +9,7 @@ import booleanIntersects from '@turf/boolean-intersects';
 import bbox from '@turf/bbox';
 import transformRotate from '@turf/transform-rotate';
 import union from '@turf/union';
+import truncate from '@turf/truncate';
 
 /**
  * Calculate area in acres from an array of [lat, lng] coordinates
@@ -327,8 +328,14 @@ export const mergePolygons = (geoJSONs) => {
     let merged = turf.feature(geoJSONs[0]);
     for (let i = 1; i < geoJSONs.length; i++) {
       const f2 = turf.feature(geoJSONs[i]);
-      const result = union(merged, f2);
-      if (result) merged = result;
+      try {
+        merged = union(turf.featureCollection([merged, f2]));
+      } catch (err) {
+        console.warn("Union precision error, truncating geometries...");
+        const t1 = truncate(merged, { precision: 6 });
+        const t2 = truncate(f2, { precision: 6 });
+        merged = union(turf.featureCollection([t1, t2]));
+      }
     }
     return merged.geometry;
   } catch (e) {
