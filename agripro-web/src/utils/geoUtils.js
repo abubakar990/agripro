@@ -8,6 +8,7 @@ import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import booleanIntersects from '@turf/boolean-intersects';
 import bbox from '@turf/bbox';
 import transformRotate from '@turf/transform-rotate';
+import union from '@turf/union';
 
 /**
  * Calculate area in acres from an array of [lat, lng] coordinates
@@ -294,38 +295,35 @@ export const TILE_LAYERS = {
   }
 };
 
-/**
- * Rotates a Polygon GeoJSON by 90 degrees clockwise around its center
- */
 export const rotatePolygon90Degrees = (geoJSON) => {
   if (!geoJSON || geoJSON.type !== 'Polygon') return geoJSON;
   
-  const feature = turf.feature(geoJSON);
-  const [minLng, minLat, maxLng, maxLat] = bbox(feature);
+  try {
+     const center = getPolygonCenter(geoJSONToLatLngs(geoJSON)[0]);
+     return transformRotate(geoJSON, 90, { pivot: [center[1], center[0]] }).geometry;
+  } catch(e) {
+     return geoJSON;
+  }
+};
+
+/**
+ * Merges multiple GeoJSON polygons into one using Turf union
+ */
+export const mergePolygons = (geoJSONs) => {
+  if (!geoJSONs || geoJSONs.length === 0) return null;
+  if (geoJSONs.length === 1) return geoJSONs[0];
   
-  const centerLng = (minLng + maxLng) / 2;
-  const centerLat = (minLat + maxLat) / 2;
-  const aspect = Math.cos(centerLat * Math.PI / 180);
-  
-  const newCoordinates = geoJSON.coordinates.map(ring => 
-    ring.map(coord => {
-      const lng = coord[0];
-      const lat = coord[1];
-      
-      const dx = (lng - centerLng) * aspect;
-      const dy = (lat - centerLat);
-      
-      const newLng = centerLng + (dy / aspect);
-      const newLat = centerLat - dx;
-      
-      return [newLng, newLat];
-    })
-  );
-  
-  return {
-    ...geoJSON,
-    coordinates: newCoordinates
-  };
+  try {
+    let merged = turf.feature(geoJSONs[0]);
+    for (let i = 1; i < geoJSONs.length; i++) {
+      const f2 = turf.feature(geoJSONs[i]);
+      merged = union(turf.featureCollection([merged, f2]));
+    }
+    return merged.geometry;
+  } catch (e) {
+    console.error("Merge error:", e);
+    return null;
+  }
 };
 
 /**

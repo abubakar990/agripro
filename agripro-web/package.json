@@ -20,6 +20,7 @@
     "@turf/helpers": "^7.3.5",
     "@turf/intersect": "^7.3.5",
     "@turf/transform-rotate": "^7.3.5",
+    "@turf/union": "^7.3.5",
     "date-fns": "^4.1.0",
     "leaflet": "^1.9.4",
     "react": "^19.2.6",

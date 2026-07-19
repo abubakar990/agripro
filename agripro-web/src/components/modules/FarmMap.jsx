@@ -4,15 +4,15 @@ import L from 'leaflet';
 import '@geoman-io/leaflet-geoman-free';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { calculateAcresFromLatLngs, layerToGeoJSON, geoJSONToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM, TILE_LAYERS, createIntersectedAcreBox, addPolygonToFeatureCollection, autoGeneratePlotsForBoundary, autoAdjustPlotsToBoundary, rotatePolygon90Degrees, getOverlapArea } from '../../utils/geoUtils';
+import { calculateAcresFromLatLngs, layerToGeoJSON, geoJSONToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM, TILE_LAYERS, createIntersectedAcreBox, addPolygonToFeatureCollection, autoGeneratePlotsForBoundary, autoAdjustPlotsToBoundary, rotatePolygon90Degrees, getOverlapArea, mergePolygons } from '../../utils/geoUtils';
 import { getPlotScore, getScoreColor, getScoreLabel } from '../../utils/perAcreCalc';
 import { formatPKR } from '../../utils/format';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
-import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconHandGrab, IconGridDots } from '@tabler/icons-react';
+import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconHandGrab, IconGridDots, IconCut, IconVectorTriangle } from '@tabler/icons-react';
 
-const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, onPlotRedrawn, mapRef }) => {
+const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, onPlotRedrawn, onPlotCut, mapRef }) => {
   const map = useMap();
   
   useEffect(() => {
@@ -61,6 +61,24 @@ const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCre
     map.on('pm:create', handleCreate);
     return () => { map.off('pm:create', handleCreate); };
   }, [map, drawMode, onPlotCreated, onFarmBoundaryCreated, onPlotRedrawn]);
+
+  useEffect(() => {
+    if (drawMode === 'cut_plot') {
+      map.pm.enableGlobalCutMode({
+        allowSelfIntersection: false,
+      });
+    } else {
+      map.pm.disableGlobalCutMode();
+    }
+  }, [map, drawMode]);
+
+  useEffect(() => {
+    const handleCut = (e) => {
+      if (onPlotCut) onPlotCut(e);
+    };
+    map.on('pm:cut', handleCut);
+    return () => map.off('pm:cut', handleCut);
+  }, [map, onPlotCut]);
 
   // Handle Click for Acre Box Tool
   useEffect(() => {
@@ -170,6 +188,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const [redrawPlotId, setRedrawPlotId] = useState(null);
   const [gridPreviewPlots, setGridPreviewPlots] = useState([]);
   const [gridParams, setGridParams] = useState({ length_ft: 207, width_ft: 207, angle: 0, keepInside: false });
+  const [selectedPlotIdsForMerge, setSelectedPlotIdsForMerge] = useState([]);
   
   // Geoman Vertex Adjustment States
   const [adjustingPlotId, setAdjustingPlotId] = useState(null);
@@ -578,6 +597,78 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     }
   };
 
+  const handlePlotCut = useCallback(async (e) => {
+    const { originalLayer, layer } = e;
+    setIsDrawMode(null);
+    try {
+      const newGeoJSONs = layer.getLayers().map(l => layerToGeoJSON(l));
+      if (newGeoJSONs.length < 2) return;
+      
+      const origGeoJSON = layerToGeoJSON(originalLayer);
+      
+      let cutPlot = plots.find(p => {
+        if (!p.boundary) return false;
+        const overlap = getOverlapArea(origGeoJSON, p.boundary);
+        const origAcres = calculateAcresFromLatLngs(geoJSONToLatLngs(origGeoJSON)[0]);
+        return overlap > (origAcres * 0.9);
+      });
+      
+      if (!cutPlot) {
+         alert("Could not identify the plot that was cut.");
+         return;
+      }
+      
+      const newPlots = newGeoJSONs.map((gj, idx) => {
+         const acres = calculateAcresFromLatLngs(geoJSONToLatLngs(gj)[0]);
+         return {
+            farm_id: numericFarmId,
+            name: `${cutPlot.name} (Part ${idx + 1})`,
+            area_acres: acres,
+            boundary: gj,
+            soil_type: cutPlot.soil_type,
+            soil_quality: cutPlot.soil_quality
+         };
+      }).filter(p => p.area_acres > 0.01);
+      
+      if (newPlots.length > 0) {
+         await supabase.from('farm_plots').delete().eq('id', cutPlot.id);
+         await supabase.from('farm_plots').insert(newPlots);
+      }
+    } catch(err) {
+      alert("Error splitting plot: " + err.message);
+    }
+  }, [plots, numericFarmId]);
+
+  const handleMergeSelectedPlots = async () => {
+    if (selectedPlotIdsForMerge.length < 2) return;
+    const plotsToMerge = plots.filter(p => selectedPlotIdsForMerge.includes(p.id));
+    if (plotsToMerge.length < 2) return;
+    
+    try {
+       const mergedGeoJSON = mergePolygons(plotsToMerge.map(p => p.boundary));
+       if (!mergedGeoJSON) throw new Error("Could not merge plots.");
+       
+       const newAcres = plotsToMerge.reduce((sum, p) => sum + parseFloat(p.area_acres || 0), 0);
+       
+       const newPlot = {
+         farm_id: numericFarmId,
+         name: `${plotsToMerge[0].name} (Merged)`,
+         boundary: mergedGeoJSON,
+         area_acres: newAcres,
+         soil_type: plotsToMerge[0].soil_type,
+         soil_quality: plotsToMerge[0].soil_quality
+       };
+       
+       await supabase.from('farm_plots').delete().in('id', selectedPlotIdsForMerge);
+       await supabase.from('farm_plots').insert([newPlot]);
+       
+       setSelectedPlotIdsForMerge([]);
+       setIsDrawMode(null);
+    } catch (e) {
+       alert("Error merging plots: " + e.message);
+    }
+  };
+
   const handleStartGridPreview = () => {
     if (!farm.boundary) return;
     const preset = acrePresets.find(p => p.id === selectedPresetId);
@@ -820,6 +911,28 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
           >
             <IconGridDots size={20} />
           </button>
+          
+          <button 
+            className={`p-3 transition-colors border-t border-slate-700/50 ${isDrawMode === 'cut_plot' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-emerald-400'} ${!farm.boundary ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={() => farm.boundary && setIsDrawMode('cut_plot')}
+            disabled={!!isDrawMode || !farm.boundary}
+            title="Split Plot (Draw a line across a plot)"
+          >
+            <IconCut size={20} />
+          </button>
+          
+          <button 
+            className={`p-3 transition-colors ${isDrawMode === 'merge_plots' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-emerald-400'} ${!farm.boundary ? 'opacity-50 cursor-not-allowed' : ''}`}
+            onClick={() => {
+               if (!farm.boundary) return;
+               setIsDrawMode('merge_plots');
+               setSelectedPlotIdsForMerge([]);
+            }}
+            disabled={!!isDrawMode || !farm.boundary}
+            title="Merge Multiple Plots"
+          >
+            <IconVectorTriangle size={20} />
+          </button>
         </div>
       </div>
 
@@ -895,6 +1008,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
               onFarmBoundaryCreated={handleFarmBoundaryCreated}
               onPlotRedrawn={handlePlotRedrawn}
               onAcreBoxClick={handleAcreBoxClick}
+              onPlotCut={handlePlotCut}
               mapRef={mapRef}
             />
 
@@ -951,7 +1065,15 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                 let color = '#10b981'; // default emerald
                 let fillOpacity = selectedPlot?.id === plot.id ? 0.5 : 0.2;
                 
-                if (mapOverlay === 'performance') {
+                if (isDrawMode === 'merge_plots') {
+                   if (selectedPlotIdsForMerge.includes(plot.id)) {
+                      color = '#3b82f6'; // blue
+                      fillOpacity = 0.8;
+                   } else {
+                      color = '#94a3b8'; // grey
+                      fillOpacity = 0.2;
+                   }
+                } else if (mapOverlay === 'performance') {
                   const score = getPlotScore(plot.id, { expenses, revenue, cropCycles, farmPlots: plots, farms });
                   color = getScoreColor(score);
                   fillOpacity = selectedPlot?.id === plot.id ? 0.7 : 0.4;
@@ -984,7 +1106,17 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                     key={plot.id}
                     positions={positions}
                     pathOptions={{ color: color, weight: 1.5, fillColor: color, fillOpacity: fillOpacity }}
-                    eventHandlers={{ click: () => { setSelectedPlot(plot); if (!isSidebarOpen) setIsSidebarOpen(true); } }}
+                    eventHandlers={{ click: () => { 
+                      if (isDrawMode === 'merge_plots') {
+                         if (selectedPlotIdsForMerge.includes(plot.id)) {
+                            setSelectedPlotIdsForMerge(selectedPlotIdsForMerge.filter(id => id !== plot.id));
+                         } else {
+                            setSelectedPlotIdsForMerge([...selectedPlotIdsForMerge, plot.id]);
+                         }
+                      } else {
+                         setSelectedPlot(plot); if (!isSidebarOpen) setIsSidebarOpen(true); 
+                      }
+                    } }}
                     ref={(ref) => { if (ref) { plotLayersRef.current[plot.id] = ref; } }}
                   >
                     <Popup>
@@ -1096,16 +1228,31 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                   </div>
                 )}
 
-            {isDrawMode && (
+            {isDrawMode && isDrawMode !== 'grid_preview' && (
               <div className="mt-4 pt-3 border-t border-slate-700/50">
                 <p className="text-[11px] text-emerald-200 bg-emerald-950/40 p-2.5 rounded-md mb-2 border border-emerald-800/50 leading-relaxed">
                   {isDrawMode === 'acre_box' 
                     ? 'Click inside the farm boundary to drop the acre box. It will automatically clip to the borders.' 
                     : isDrawMode === 'redraw_plot'
                     ? 'Redraw the boundary for the selected plot.'
+                    : isDrawMode === 'cut_plot'
+                    ? 'Draw a line perfectly across a plot to slice it in two.'
+                    : isDrawMode === 'merge_plots'
+                    ? 'Click to select multiple adjacent plots. Then click Merge.'
                     : 'Click to draw points. Move mouse to screen edges to scroll. Connect back to the first point to finish.'}
                 </p>
-                <button onClick={cancelDraw} className="text-xs text-rose-400 font-bold hover:text-rose-300 flex items-center justify-center w-full py-1">
+                
+                {isDrawMode === 'merge_plots' && (
+                  <button 
+                    onClick={handleMergeSelectedPlots} 
+                    disabled={selectedPlotIdsForMerge.length < 2}
+                    className={`dji-button-primary w-full py-2 mb-2 ${selectedPlotIdsForMerge.length < 2 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    Merge {selectedPlotIdsForMerge.length} Plots
+                  </button>
+                )}
+                
+                <button onClick={() => setIsDrawMode(null)} className="text-xs text-rose-400 font-bold hover:text-rose-300 flex items-center justify-center w-full py-1">
                   Cancel Tool
                 </button>
               </div>
