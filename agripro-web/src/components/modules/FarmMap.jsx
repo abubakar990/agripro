@@ -549,71 +549,69 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const tileUrl = TILE_LAYERS[mapType]?.url || TILE_LAYERS.hybrid.url;
 
   return (
-    <div className="flex flex-col h-full space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate('/farms')}>
-            <IconArrowLeft size={18} /> Back
-          </Button>
-          <h2 className="text-xl font-bold text-text-primary">Map View: {farm.name}</h2>
+    <div className="-m-4 lg:-m-6 h-[calc(100vh-73px)] relative flex flex-col bg-[#0a0a0a]">
+      
+      {/* Top Floating Header */}
+      <div className="absolute top-4 left-4 z-[400] flex items-center gap-3">
+        <button className="dji-panel p-2 hover:bg-slate-800 transition-colors cursor-pointer" onClick={() => navigate('/farms')}>
+          <IconArrowLeft size={20} className="text-white" />
+        </button>
+        <div className="dji-panel px-4 py-2.5 flex items-center gap-3 cursor-default">
+          <IconBuildingCommunity size={16} className="text-emerald-400" />
+          <h2 className="text-xs font-bold text-white tracking-wider uppercase">{farm.name}</h2>
         </div>
-        <Button variant="outline" onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="lg:hidden">
-          {isSidebarOpen ? <IconLayoutSidebarRightCollapse size={18} /> : <IconLayoutSidebarRightExpand size={18} />}
-          {isSidebarOpen ? ' Hide Panel' : ' Show Panel'}
-        </Button>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-4 flex-1">
-        {/* MAP CONTAINER */}
-        <div className={`flex-1 agri-card relative overflow-hidden farm-map-container rounded-xl border border-border transition-all duration-300`} style={{ height: 'calc(100vh - 200px)', minHeight: '400px' }}>
-          
-          <div className="absolute top-4 left-14 z-[400] flex flex-col gap-2">
-            <form onSubmit={handleSearch} className="flex bg-white shadow-md rounded-md overflow-hidden border border-border">
-              <input 
-                type="text" 
-                placeholder="Search location..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="px-3 py-2 text-sm outline-none w-48 text-text-primary bg-white"
-              />
-              <button type="submit" className="px-3 hover:bg-bg text-text-muted transition-colors">
-                <IconSearch size={16} />
-              </button>
-            </form>
-          </div>
+      {/* Map Type Controls */}
+      <div className="absolute top-4 right-4 z-[400] dji-panel flex overflow-hidden">
+        <button 
+          className={`px-4 py-2.5 text-[10px] font-bold tracking-widest uppercase transition-colors cursor-pointer ${mapType === 'hybrid' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+          onClick={() => setMapType('hybrid')}
+        >
+          Hybrid
+        </button>
+        <button 
+          className={`px-4 py-2.5 text-[10px] font-bold tracking-widest uppercase transition-colors border-l border-r border-slate-700/50 cursor-pointer ${mapType === 'satellite' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+          onClick={() => setMapType('satellite')}
+        >
+          Satellite
+        </button>
+        <button 
+          className={`px-4 py-2.5 text-[10px] font-bold tracking-widest uppercase transition-colors cursor-pointer ${mapType === 'street' ? 'bg-emerald-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+          onClick={() => setMapType('street')}
+        >
+          Street
+        </button>
+      </div>
 
-          <div className="absolute top-4 right-4 z-[400] bg-white rounded-md shadow-md border border-border overflow-hidden flex">
-            <button 
-              className={`px-3 py-2 text-sm font-medium ${mapType === 'hybrid' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-bg'}`}
-              onClick={() => setMapType('hybrid')}
-            >
-              Hybrid
-            </button>
-            <button 
-              className={`px-3 py-2 text-sm font-medium ${mapType === 'satellite' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-bg'}`}
-              onClick={() => setMapType('satellite')}
-            >
-              Satellite
-            </button>
-            <button 
-              className={`px-3 py-2 text-sm font-medium ${mapType === 'street' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-bg'}`}
-              onClick={() => setMapType('street')}
-            >
-              Street
-            </button>
-          </div>
-          
-          <div className="absolute bottom-6 right-4 z-[400] hidden lg:block">
-            <button 
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="bg-white p-2 rounded-full shadow-lg border border-border text-text-secondary hover:text-primary transition-colors"
-              title={isSidebarOpen ? "Hide Panel" : "Show Panel"}
-            >
-              {isSidebarOpen ? <IconLayoutSidebarRightCollapse size={24} /> : <IconLayoutSidebarRightExpand size={24} />}
-            </button>
-          </div>
+      {/* Search Bar */}
+      <div className="absolute top-16 left-4 z-[400]">
+        <form onSubmit={handleSearch} className="dji-panel flex overflow-hidden">
+          <input 
+            type="text" 
+            placeholder="Search location..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="px-3 py-2 text-xs outline-none w-48 bg-transparent text-white placeholder:text-slate-400"
+          />
+          <button type="submit" className="px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors border-l border-slate-700/50 cursor-pointer">
+            <IconSearch size={14} />
+          </button>
+        </form>
+      </div>
 
-          <MapContainer id="farm-map-container" center={mapCenter} zoom={DEFAULT_ZOOM} style={{ height: '100%', width: '100%', zIndex: 0 }}>
+      {/* Sidebar Toggle - Mobile */}
+      <div className="absolute bottom-24 right-4 z-[400] lg:hidden">
+        <button 
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="dji-panel p-3 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+        >
+          {isSidebarOpen ? <IconLayoutSidebarRightCollapse size={24} /> : <IconLayoutSidebarRightExpand size={24} />}
+        </button>
+      </div>
+
+      <div className="flex-1 relative w-full h-full farm-map-container">
+        <MapContainer id="farm-map-container" center={mapCenter} zoom={DEFAULT_ZOOM} style={{ height: '100%', width: '100%', zIndex: 0 }}>
             <TileLayer url={tileUrl} maxZoom={20} attribution={TILE_LAYERS[mapType]?.attribution} />
             
             <MapController 
@@ -636,7 +634,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                       <Polygon 
                         key={`farm-bound-${idx}`}
                         positions={positions} 
-                        pathOptions={{ color: '#1a4d2e', weight: 3, dashArray: '5, 10', fillOpacity: 0.05, fillColor: '#1a4d2e' }}
+                        pathOptions={{ color: '#10b981', weight: 2, dashArray: '5, 8', fillOpacity: 0.1, fillColor: '#059669' }}
                         ref={(ref) => { 
                           if (ref) { 
                             if (!farmLayerRef.current || !Array.isArray(farmLayerRef.current)) farmLayerRef.current = []; 
@@ -664,7 +662,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                   <Polygon
                     key={plot.id}
                     positions={positions}
-                    pathOptions={{ color: color, weight: 2, fillColor: color, fillOpacity: selectedPlot?.id === plot.id ? 0.6 : 0.35 }}
+                    pathOptions={{ color: color, weight: 1.5, fillColor: color, fillOpacity: selectedPlot?.id === plot.id ? 0.5 : 0.2 }}
                     eventHandlers={{ click: () => { setSelectedPlot(plot); if (!isSidebarOpen) setIsSidebarOpen(true); } }}
                     ref={(ref) => { if (ref) { plotLayersRef.current[plot.id] = ref; } }}
                   >
@@ -682,153 +680,153 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
           </MapContainer>
         </div>
 
-        {/* SIDEBAR */}
-        {isSidebarOpen && (
-          <div className="w-full lg:w-80 flex flex-col gap-4 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className="agri-card p-4">
-              <h3 className="font-bold text-lg text-text-primary mb-1">{farm.name}</h3>
-              <div className="flex justify-between items-center text-sm mb-3 pb-3 border-b border-border">
-                <span className="text-text-muted flex items-center gap-1"><IconMapPin size={14}/> Area</span>
-                <span className="font-bold text-text-primary">
-                  {adjustingFarmBoundary && dynamicAreaAcres !== null 
-                    ? <span className="text-primary">{dynamicAreaAcres.toFixed(2)} Ac (Live)</span>
-                    : `${totalFarmAcres > 0 ? parseFloat(totalFarmAcres).toFixed(2) : '—'} Ac`}
-                </span>
+      {/* SIDEBAR PANEL */}
+      {isSidebarOpen && (
+        <div className="absolute top-16 right-4 bottom-4 w-full max-w-[340px] z-[400] flex flex-col gap-3 pointer-events-none animate-in fade-in slide-in-from-right-4 duration-300">
+          <div className="dji-panel p-4 pointer-events-auto">
+            <div className="flex justify-between items-center text-xs mb-3 pb-3 border-b border-slate-700/50">
+              <span className="text-slate-400 uppercase tracking-wider font-bold flex items-center gap-1">
+                <IconMapPin size={12}/> Total Farm Area
+              </span>
+              <span className="font-bold text-emerald-400 text-sm">
+                {adjustingFarmBoundary && dynamicAreaAcres !== null 
+                  ? <span className="text-amber-400">{dynamicAreaAcres.toFixed(2)} Ac (Live)</span>
+                  : `${totalFarmAcres > 0 ? parseFloat(totalFarmAcres).toFixed(2) : '—'} Ac`}
+              </span>
+            </div>
+            
+            <div className="mb-4">
+              <div className="text-[10px] font-bold text-slate-400 uppercase mb-2 flex justify-between items-center">
+                <span>Acre Dimension (For Auto-Plots)</span>
+                <button onClick={() => setIsAcreModalOpen(true)} className="text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1">
+                  <IconDeviceFloppy size={12}/> New
+                </button>
               </div>
-              
-              <div className="border border-border rounded-lg p-3 bg-bg-alt mb-3">
-                <div className="text-xs font-bold text-text-secondary uppercase mb-2 flex justify-between items-center">
-                  <span>Acre Dimension (For Auto-Plots)</span>
-                  <button onClick={() => setIsAcreModalOpen(true)} className="text-primary hover:underline flex items-center gap-1">
-                    <IconDeviceFloppy size={12}/> New
+              <div className="flex gap-2">
+                <select 
+                  className="dji-input"
+                  value={selectedPresetId}
+                  onChange={(e) => setSelectedPresetId(e.target.value)}
+                >
+                  <option value="">-- Select Dimension --</option>
+                  {acrePresets.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.length_ft}' x {p.width_ft}')</option>
+                  ))}
+                </select>
+                {farm.boundary && (
+                  <button className="dji-button-primary px-2" onClick={startAcreBoxTool} disabled={!!isDrawMode || !selectedPresetId} title="Place single Acre Box">
+                    <IconSquarePlus size={14} /> Place
                   </button>
-                </div>
-                <div className="flex gap-2">
-                  <select 
-                    className="agri-input h-9 text-xs flex-1 px-2"
-                    value={selectedPresetId}
-                    onChange={(e) => setSelectedPresetId(e.target.value)}
-                  >
-                    <option value="">-- Select Dimension --</option>
-                    {acrePresets.map(p => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.length_ft}' x {p.width_ft}')</option>
-                    ))}
-                  </select>
-                  {farm.boundary && (
-                    <Button variant="primary" className="px-2" onClick={startAcreBoxTool} disabled={!!isDrawMode || !selectedPresetId} title="Place single Acre Box">
-                      <IconSquarePlus size={16} /> Place
-                    </Button>
-                  )}
-                </div>
+                )}
               </div>
-
-              {!farm.boundary ? (
-                <Button variant="primary" className="w-full" onClick={startDrawFarm} disabled={!!isDrawMode}>
-                  <IconMap size={16} /> Draw First Farm Boundary
-                </Button>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  
-                  {adjustingFarmBoundary ? (
-                    <div className="bg-primary/10 border border-primary/30 p-3 rounded-lg flex flex-col gap-2">
-                      <p className="text-xs font-bold text-primary">Adjusting Boundary</p>
-                      <p className="text-xs text-text-muted">Drag the white markers on the map to adjust the farm shape.</p>
-                      <div className="flex gap-2">
-                        <Button variant="outline" className="flex-1 py-1 h-8 text-xs" onClick={() => setAdjustingFarmBoundary(false)}>Cancel</Button>
-                        <Button variant="primary" className="flex-1 py-1 h-8 text-xs bg-primary text-white" onClick={handleSaveFarmAdjustment}>
-                          <IconCheck size={14} className="mr-1"/> Save
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex gap-1 flex-wrap">
-                      <Button variant="outline" className="flex-1 px-2 text-xs" onClick={startDrawFarm} disabled={!!isDrawMode}>
-                        <IconMap size={14} /> Add Area
-                      </Button>
-                      <Button variant="outline" className="flex-1 px-2 text-xs" onClick={startDrawPlot} disabled={!!isDrawMode}>
-                        <IconPlus size={14} /> Draw Plot
-                      </Button>
-                      <Button variant="outline" className="px-2 flex-1" onClick={() => setAdjustingFarmBoundary(true)} title="Adjust Farm Boundary">
-                        <IconDragDrop size={16} className="text-primary mr-1"/> Adjust All
-                      </Button>
-                    </div>
-                  )}
-                  
-                  {farm.boundary && (
-                    <div className="flex flex-col gap-2 mt-2 border-t border-border pt-2">
-                      <p className="text-xs font-bold text-text-secondary uppercase mb-1">Farm Boundaries ({farm.boundary.type === 'FeatureCollection' ? farm.boundary.features.length : 1})</p>
-                      {(farm.boundary.type === 'FeatureCollection' ? farm.boundary.features : [{ geometry: farm.boundary }]).map((f, idx) => {
-                        const acres = calculateAcresFromLatLngs(geoJSONToLatLngs(f.geometry)[0]);
-                        return (
-                          <div 
-                            key={idx} 
-                            className="flex justify-between items-center bg-bg-alt p-2 rounded border border-border text-xs cursor-pointer hover:border-primary transition-colors"
-                            onClick={() => {
-                              if (mapRef.current) {
-                                try {
-                                  const bounds = L.geoJSON({ type: 'Feature', geometry: f.geometry }).getBounds();
-                                  if (bounds.isValid()) mapRef.current.fitBounds(bounds, { padding: [30, 30] });
-                                } catch(e) {}
-                              }
-                            }}
-                            title="Click to zoom"
-                          >
-                            <div className="flex items-center gap-2">
-                              <IconMapPin size={12} className="text-primary"/>
-                              <span className="font-bold">Boundary {idx + 1}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-text-muted">{acres.toFixed(2)} Ac</span>
-                              {!adjustingFarmBoundary && (
-                                 <button 
-                                   className="text-expense hover:bg-expense/10 p-1 rounded transition-colors" 
-                                   onClick={(e) => { e.stopPropagation(); handleDeleteSpecificBoundary(idx); }}
-                                   title="Delete this boundary"
-                                 >
-                                   <IconTrash size={14} />
-                                 </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  
-                </div>
-              )}
-
-              {isDrawMode && (
-                <div className="mt-3">
-                  <p className="text-xs text-accent-blue font-medium bg-blue-50 p-2 rounded-md mb-2 border border-blue-100">
-                    {isDrawMode === 'acre_box' 
-                      ? 'Click anywhere inside the farm boundary to drop the acre box. It will automatically clip to the borders.' 
-                      : isDrawMode === 'redraw_plot'
-                      ? 'Redraw the boundary for the selected plot.'
-                      : 'Click on the map to draw points. Move mouse to screen edges to scroll map. Connect back to the first point to finish.'}
-                  </p>
-                  <button onClick={cancelDraw} className="text-xs text-expense font-bold hover:underline">
-                    Cancel Tool
-                  </button>
-                </div>
-              )}
             </div>
 
-            <div className="agri-card flex-1 flex flex-col overflow-hidden" style={{ maxHeight: 'calc(100vh - 430px)', minHeight: '300px' }}>
-              <div className="p-3 border-b border-border flex justify-between items-center bg-bg-alt">
-                <span className="font-bold text-sm text-text-primary flex items-center gap-2">
-                  <IconLayersIntersect size={16} className="text-primary"/> 
-                  Plots ({plots.length})
-                </span>
-              </div>
-              
-              <div className="overflow-y-auto flex-1 p-2 space-y-2">
-                {plots.length === 0 ? (
-                  <div className="text-center py-8 opacity-50">
-                    <IconLayersIntersect size={32} className="mx-auto mb-2" />
-                    <p className="text-sm font-bold">No plots mapped yet.</p>
+            {!farm.boundary ? (
+              <button className="dji-button-primary w-full py-2" onClick={startDrawFarm} disabled={!!isDrawMode}>
+                <IconMap size={16} /> Draw First Farm Boundary
+              </button>
+            ) : (
+              <div className="flex flex-col gap-3">
+                
+                {adjustingFarmBoundary ? (
+                  <div className="bg-emerald-900/20 border border-emerald-500/30 p-3 rounded-lg flex flex-col gap-2">
+                    <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Adjusting Boundary</p>
+                    <p className="text-xs text-slate-300">Drag the white markers on the map to adjust the farm shape.</p>
+                    <div className="flex gap-2 mt-1">
+                      <button className="dji-button flex-1" onClick={() => setAdjustingFarmBoundary(false)}>Cancel</button>
+                      <button className="dji-button-primary flex-1" onClick={handleSaveFarmAdjustment}>
+                        <IconCheck size={14} className="mr-1"/> Save
+                      </button>
+                    </div>
                   </div>
                 ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <button className={`dji-button ${isDrawMode === 'farm' ? 'dji-button-active' : ''}`} onClick={startDrawFarm} disabled={!!isDrawMode}>
+                      <IconMap size={14} /> Add Area
+                    </button>
+                    <button className={`dji-button ${isDrawMode === 'plot' ? 'dji-button-active' : ''}`} onClick={startDrawPlot} disabled={!!isDrawMode}>
+                      <IconPlus size={14} /> Draw Plot
+                    </button>
+                    <button className="dji-button col-span-2" onClick={() => setAdjustingFarmBoundary(true)} title="Adjust Farm Boundary">
+                      <IconDragDrop size={14} className="text-emerald-400 mr-1"/> Adjust Farm Boundaries
+                    </button>
+                  </div>
+                )}
+                
+                {farm.boundary && (
+                  <div className="flex flex-col gap-2 mt-2 border-t border-slate-700/50 pt-3">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Active Boundaries ({farm.boundary.type === 'FeatureCollection' ? farm.boundary.features.length : 1})</p>
+                    {(farm.boundary.type === 'FeatureCollection' ? farm.boundary.features : [{ geometry: farm.boundary }]).map((f, idx) => {
+                      const acres = calculateAcresFromLatLngs(geoJSONToLatLngs(f.geometry)[0]);
+                      return (
+                        <div 
+                          key={idx} 
+                          className="flex justify-between items-center bg-slate-950/40 p-2.5 rounded-md border border-slate-800 text-xs cursor-pointer hover:border-emerald-500/50 transition-colors"
+                          onClick={() => {
+                            if (mapRef.current) {
+                              try {
+                                const bounds = L.geoJSON({ type: 'Feature', geometry: f.geometry }).getBounds();
+                                if (bounds.isValid()) mapRef.current.fitBounds(bounds, { padding: [30, 30] });
+                              } catch(e) {}
+                            }
+                          }}
+                          title="Click to zoom"
+                        >
+                          <div className="flex items-center gap-2">
+                            <IconMapPin size={12} className="text-emerald-400"/>
+                            <span className="font-medium text-slate-200">Segment {idx + 1}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-emerald-400 font-bold">{acres.toFixed(2)} Ac</span>
+                            {!adjustingFarmBoundary && (
+                               <button 
+                                 className="text-rose-400 hover:text-rose-300 p-1 hover:bg-rose-950/50 rounded transition-colors" 
+                                 onClick={(e) => { e.stopPropagation(); handleDeleteSpecificBoundary(idx); }}
+                                 title="Delete this segment"
+                               >
+                                 <IconTrash size={14} />
+                               </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isDrawMode && (
+              <div className="mt-4 pt-3 border-t border-slate-700/50">
+                <p className="text-[11px] text-emerald-200 bg-emerald-950/40 p-2.5 rounded-md mb-2 border border-emerald-800/50 leading-relaxed">
+                  {isDrawMode === 'acre_box' 
+                    ? 'Click inside the farm boundary to drop the acre box. It will automatically clip to the borders.' 
+                    : isDrawMode === 'redraw_plot'
+                    ? 'Redraw the boundary for the selected plot.'
+                    : 'Click to draw points. Move mouse to screen edges to scroll. Connect back to the first point to finish.'}
+                </p>
+                <button onClick={cancelDraw} className="text-xs text-rose-400 font-bold hover:text-rose-300 flex items-center justify-center w-full py-1">
+                  Cancel Tool
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="dji-panel flex-1 flex flex-col overflow-hidden pointer-events-auto">
+            <div className="p-3 border-b border-slate-700/50 flex justify-between items-center bg-slate-800/40">
+              <span className="font-bold text-xs text-slate-200 flex items-center gap-2 uppercase tracking-wider">
+                <IconLayersIntersect size={14} className="text-emerald-400"/> 
+                Mapped Plots ({plots.length})
+              </span>
+            </div>
+            
+            <div className="overflow-y-auto flex-1 p-2 space-y-2 custom-scrollbar">
+              {plots.length === 0 ? (
+                <div className="text-center py-8 opacity-50 text-slate-400">
+                  <IconLayersIntersect size={32} className="mx-auto mb-2 text-slate-500" />
+                  <p className="text-xs font-bold">No plots mapped yet.</p>
+                </div>
+              ) : (
                   plots.map(plot => {
                     const activeCycle = cropCycles.find(c => c.plot_id === plot.id && c.status !== 'Harvested' && c.status !== 'Failed');
                     const score = getPlotScore(plot.id, { expenses, revenue, cropCycles, farmPlots: plots, farms });
@@ -848,68 +846,89 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                           if (mapRef.current && plot.boundary) {
                             try {
                               const bounds = L.geoJSON({ type: 'Feature', geometry: plot.boundary }).getBounds();
-                              if (bounds.isValid()) mapRef.current.fitBounds(bounds, { padding: [30, 30] });
-                            } catch (e) {}
+                              if (bounds.isValid()) mapRef.current.fitBounds(bounds, { padding: [40, 40] });
+                            } catch(e) {}
                           }
                         }}
-                        className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                          isSelected ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/30'
-                        }`}
+                        className={`
+                          p-3 rounded-lg border transition-all cursor-pointer group
+                          ${isSelected ? 'bg-slate-800/80 border-emerald-500' : 'bg-slate-950/40 border-slate-800 hover:border-slate-600'}
+                        `}
                       >
-                        <div className="flex justify-between items-start mb-1">
-                          <span className="font-bold text-text-primary text-sm">{plot.name}</span>
-                          <Badge variant={score !== null ? (score > 70 ? 'success' : score > 40 ? 'warning' : 'danger') : 'info'}>
-                            {getScoreLabel(score)}
-                          </Badge>
-                        </div>
-                        <div className="flex justify-between text-xs text-text-muted">
-                          <span>{plotArea.toFixed(2)} Ac</span>
-                          <span>{activeCycle ? activeCycle.crop : 'Fallow'}</span>
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h4 className="font-bold text-sm text-slate-200">{plot.name}</h4>
+                            <span className="text-xs text-slate-400">{plotArea.toFixed(2)} Acres</span>
+                          </div>
+                          {score !== null && (
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs font-bold" style={{ color: getScoreColor(score) }}>{getScoreLabel(score)}</span>
+                              <span className="text-[10px] text-slate-500">Score: {score}/100</span>
+                            </div>
+                          )}
                         </div>
                         
+                        {activeCycle ? (
+                          <div className="mb-3">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase">Current Crop</span>
+                            <p className="text-xs text-emerald-400 font-medium truncate">{activeCycle.crop_name} • {activeCycle.variety}</p>
+                          </div>
+                        ) : (
+                          <div className="mb-3">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase">Current Crop</span>
+                            <p className="text-xs text-slate-400 italic">No active cycle</p>
+                          </div>
+                        )}
+                        
                         {isSelected && (
-                          <div className="mt-3 pt-3 border-t border-border space-y-2">
+                          <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-slate-700/50">
                             {isAdjustingThis ? (
-                              <div className="bg-primary/10 border border-primary/30 p-3 rounded-lg flex flex-col gap-2 my-2">
-                                <div className="flex justify-between items-center">
-                                  <p className="text-xs font-bold text-primary">Adjusting Plot</p>
-                                  <p className="text-xs font-bold text-primary">{dynamicAreaAcres !== null ? dynamicAreaAcres.toFixed(2) : plotArea.toFixed(2)} Ac</p>
-                                </div>
-                                <p className="text-xs text-text-muted">Drag the white markers on the map to adjust the plot shape.</p>
+                              <div className="bg-emerald-900/20 p-2 rounded border border-emerald-500/30">
+                                <p className="text-[10px] text-emerald-400 mb-2">Adjusting plot boundary. Drag markers on map.</p>
                                 <div className="flex gap-2">
-                                  <Button variant="outline" className="flex-1 py-1 h-8 text-xs" onClick={(e) => { e.stopPropagation(); setAdjustingPlotId(null); }}>Cancel</Button>
-                                  <Button variant="primary" className="flex-1 py-1 h-8 text-xs bg-primary text-white" onClick={(e) => { e.stopPropagation(); handleSavePlotAdjustment(); }}>
-                                    <IconCheck size={14} className="mr-1"/> Save
-                                  </Button>
+                                  <button className="dji-button flex-1" onClick={(e) => { e.stopPropagation(); setAdjustingPlotId(null); }}>Cancel</button>
+                                  <button className="dji-button-primary flex-1" onClick={(e) => { e.stopPropagation(); handleSavePlotAdjustment(); }}>Save</button>
                                 </div>
                               </div>
                             ) : (
                               <>
                                 <div className="flex justify-between text-xs">
-                                  <span className="text-text-muted">Total Expense</span>
-                                  <span className="font-medium text-expense">{formatPKR(totalExp)}</span>
+                                  <span className="text-slate-400">Total Expense</span>
+                                  <span className="font-medium text-rose-400">{formatPKR(totalExp)}</span>
                                 </div>
                                 <div className="flex justify-between text-xs">
-                                  <span className="text-text-muted">Total Revenue</span>
-                                  <span className="font-medium text-revenue">{formatPKR(totalRev)}</span>
+                                  <span className="text-slate-400">Total Revenue</span>
+                                  <span className="font-medium text-emerald-400">{formatPKR(totalRev)}</span>
                                 </div>
                                 <div className="flex justify-between text-xs">
-                                  <span className="text-text-muted">Profit</span>
-                                  <span className={`font-bold ${totalRev - totalExp >= 0 ? 'text-revenue' : 'text-expense'}`}>
+                                  <span className="text-slate-400">Profit</span>
+                                  <span className={`font-bold ${totalRev - totalExp >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                     {formatPKR(totalRev - totalExp)}
                                   </span>
                                 </div>
                                 
-                                <div className="flex gap-2 pt-2 border-t border-border mt-2">
-                                  <Button variant="outline" className="flex-1 py-1 text-xs h-7" onClick={(e) => { e.stopPropagation(); startRedrawPlot(plot.id); }} title="Redraw completely">
-                                    <IconEdit size={14} /> Redraw
-                                  </Button>
-                                  <Button variant="outline" className="flex-1 py-1 text-xs h-7" onClick={(e) => { e.stopPropagation(); setAdjustingPlotId(plot.id); }} title="Drag vertices">
-                                    <IconDragDrop size={14} /> Adjust
-                                  </Button>
-                                  <Button variant="outline" className="px-2 py-1 text-xs h-7 text-expense border-expense/30 hover:bg-expense/10" onClick={(e) => { e.stopPropagation(); handleDeletePlot(plot.id); }}>
-                                    <IconTrash size={14} />
-                                  </Button>
+                                <div className="flex gap-2 justify-end mt-2">
+                                  <button 
+                                    className="text-slate-400 hover:text-emerald-400 p-1.5 hover:bg-slate-800 rounded transition-colors" 
+                                    onClick={(e) => { e.stopPropagation(); startRedrawPlot(plot.id); }}
+                                    title="Redraw completely"
+                                  >
+                                    <IconEdit size={16} />
+                                  </button>
+                                  <button 
+                                    className="text-slate-400 hover:text-emerald-400 p-1.5 hover:bg-slate-800 rounded transition-colors" 
+                                    onClick={(e) => { e.stopPropagation(); setAdjustingPlotId(plot.id); }}
+                                    title="Adjust vertices"
+                                  >
+                                    <IconDragDrop size={16} />
+                                  </button>
+                                  <button 
+                                    className="text-slate-400 hover:text-rose-400 p-1.5 hover:bg-rose-950/50 rounded transition-colors" 
+                                    onClick={(e) => { e.stopPropagation(); handleDeletePlot(plot.id); }}
+                                    title="Delete plot"
+                                  >
+                                    <IconTrash size={16} />
+                                  </button>
                                 </div>
                               </>
                             )}
@@ -923,7 +942,6 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
             </div>
           </div>
         )}
-      </div>
 
       {/* Plot Modal */}
       <Modal isOpen={isPlotModalOpen} onClose={() => setIsPlotModalOpen(false)} title="Add New Plot">

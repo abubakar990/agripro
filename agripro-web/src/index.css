@@ -88,14 +88,38 @@ body {
 
 /* Farm Map Styles */
 .farm-map-container {
-  @apply rounded-card overflow-hidden;
+  @apply overflow-hidden relative bg-[#0a0a0a];
 }
 
 .farm-map-container .leaflet-container {
   height: 100%;
   width: 100%;
-  border-radius: 12px;
   z-index: 1;
+  background: #0a0a0a;
+}
+
+.dji-panel {
+  @apply bg-slate-900/90 backdrop-blur-md border border-slate-700/50 shadow-2xl text-slate-200 rounded-xl overflow-hidden;
+}
+
+.dji-input {
+  @apply bg-slate-950/50 border border-slate-700 text-slate-200 focus:border-emerald-500 rounded-md text-xs px-2 py-1.5 w-full outline-none transition-colors;
+}
+
+.dji-button {
+  @apply bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-emerald-500 transition-colors rounded-md px-3 py-1.5 text-xs font-medium flex items-center justify-center gap-1 shadow-sm;
+}
+
+.dji-button-primary {
+  @apply bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 transition-colors rounded-md px-3 py-1.5 text-xs font-medium flex items-center justify-center gap-1 shadow-sm shadow-emerald-900/20;
+}
+
+.dji-button-active {
+  @apply bg-emerald-900/40 text-emerald-400 border border-emerald-500;
+}
+
+.dji-button-danger {
+  @apply bg-rose-950/40 text-rose-400 hover:bg-rose-900/60 hover:text-rose-300 border border-rose-900/50 hover:border-rose-500/50 transition-colors rounded-md;
 }
 
 .plot-tooltip {
