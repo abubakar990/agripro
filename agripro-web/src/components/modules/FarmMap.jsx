@@ -603,7 +603,20 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     const { originalLayer, layer } = e;
     setIsDrawMode(null);
     try {
-      const newGeoJSONs = layer.getLayers().map(l => layerToGeoJSON(l));
+      let newGeoJSONs = [];
+      if (typeof layer.getLayers === 'function') {
+         newGeoJSONs = layer.getLayers().map(l => layerToGeoJSON(l));
+      } else {
+         const cutGeoJSON = layer.toGeoJSON();
+         if (cutGeoJSON.type === 'FeatureCollection') {
+            newGeoJSONs = cutGeoJSON.features.map(f => f.geometry);
+         } else if (cutGeoJSON.geometry && cutGeoJSON.geometry.type === 'MultiPolygon') {
+            newGeoJSONs = cutGeoJSON.geometry.coordinates.map(coords => ({ type: 'Polygon', coordinates: coords }));
+         } else {
+            newGeoJSONs = [cutGeoJSON.geometry || cutGeoJSON];
+         }
+      }
+      
       if (newGeoJSONs.length < 2) return;
       
       const origGeoJSON = layerToGeoJSON(originalLayer);
