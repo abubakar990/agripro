@@ -187,7 +187,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const [isDrawMode, setIsDrawMode] = useState(null);
   const [redrawPlotId, setRedrawPlotId] = useState(null);
   const [gridPreviewPlots, setGridPreviewPlots] = useState([]);
-  const [gridParams, setGridParams] = useState({ length_ft: 207, width_ft: 207, angle: 0, keepInside: false, offsetX: 0, offsetY: 0 });
+  const [gridParams, setGridParams] = useState({ length_ft: 208.71, width_ft: 208.71, angle: 0, keepInside: false, offsetX: 0, offsetY: 0 });
   const [selectedPlotIdsForMerge, setSelectedPlotIdsForMerge] = useState([]);
   const [isPlotManagerOpen, setIsPlotManagerOpen] = useState(false);
   const [bulkSelectedIds, setBulkSelectedIds] = useState([]);
@@ -261,7 +261,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   useEffect(() => {
     if (isDrawMode === 'grid_preview' && farm?.boundary) {
       const timer = setTimeout(() => {
-         const preview = autoGeneratePlotsForBoundary(farm.boundary, parseFloat(gridParams.length_ft) || 100, parseFloat(gridParams.width_ft) || 100, parseFloat(gridParams.angle) || 0, gridParams.keepInside, parseFloat(gridParams.offsetX) || 0, parseFloat(gridParams.offsetY) || 0);
+         const preview = autoGeneratePlotsForBoundary(farm.boundary, parseFloat(gridParams.length_ft) || 208.71, parseFloat(gridParams.width_ft) || 208.71, parseFloat(gridParams.angle) || 0, gridParams.keepInside, parseFloat(gridParams.offsetX) || 0, parseFloat(gridParams.offsetY) || 0);
          setGridPreviewPlots(preview);
       }, 100); // debounce slightly
       return () => clearTimeout(timer);
