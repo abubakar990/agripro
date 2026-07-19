@@ -590,8 +590,10 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       }).filter(p => p.area_acres > 0.01);
       
       if (newPlots.length > 0) {
-         await supabase.from('farm_plots').delete().eq('id', cutPlot.id);
-         await supabase.from('farm_plots').insert(newPlots);
+         const { error: delError } = await supabase.from('farm_plots').delete().eq('id', cutPlot.id);
+         if (delError) throw delError;
+         const { error: insError } = await supabase.from('farm_plots').insert(newPlots);
+         if (insError) throw insError;
          if (refetch) refetch();
       }
     } catch(err) {
@@ -619,8 +621,11 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
          soil_quality: plotsToMerge[0].soil_quality
        };
        
-       await supabase.from('farm_plots').delete().in('id', selectedPlotIdsForMerge);
-       await supabase.from('farm_plots').insert([newPlot]);
+       const { error: delError } = await supabase.from('farm_plots').delete().in('id', selectedPlotIdsForMerge);
+       if (delError) throw delError;
+       
+       const { error: insError } = await supabase.from('farm_plots').insert([newPlot]);
+       if (insError) throw insError;
        if (refetch) refetch();
        
        setSelectedPlotIdsForMerge([]);
