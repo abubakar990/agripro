@@ -10,10 +10,9 @@ import { formatPKR } from '../../utils/format';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
-import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy } from '@tabler/icons-react';
+import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit } from '@tabler/icons-react';
 
-// Inner component that has access to the map instance via useMap()
-const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, mapRef }) => {
+const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, onPlotRedrawn, mapRef }) => {
   const map = useMap();
   
   useEffect(() => {
@@ -52,6 +51,8 @@ const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCre
         onFarmBoundaryCreated(geojson, acres, center.lat, center.lng);
       } else if (drawMode === 'plot') {
         onPlotCreated(geojson, acres);
+      } else if (drawMode === 'redraw_plot') {
+        onPlotRedrawn(geojson, acres);
       }
       
       map.removeLayer(layer);
@@ -59,7 +60,7 @@ const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCre
 
     map.on('pm:create', handleCreate);
     return () => { map.off('pm:create', handleCreate); };
-  }, [map, drawMode, onPlotCreated, onFarmBoundaryCreated]);
+  }, [map, drawMode, onPlotCreated, onFarmBoundaryCreated, onPlotRedrawn]);
 
   // Handle Click for Acre Box Tool
   useEffect(() => {
@@ -79,6 +80,52 @@ const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCre
     
     return () => { map.off('click', handleMapClick); };
   }, [map, drawMode, onAcreBoxClick]);
+
+  // Auto Edge Panning while Drawing
+  useEffect(() => {
+    if (!drawMode) return;
+    let animationFrame;
+    let currentDx = 0;
+    let currentDy = 0;
+    const edgeZone = 50; // pixels from edge to trigger pan
+    const panSpeed = 8; // pixels per frame
+
+    const panStep = () => {
+      if (currentDx !== 0 || currentDy !== 0) {
+        map.panBy([currentDx, currentDy], { animate: false });
+      }
+      animationFrame = requestAnimationFrame(panStep);
+    };
+
+    const handleMouseMove = (e) => {
+      const { x, y } = e.containerPoint;
+      const size = map.getSize();
+      
+      currentDx = 0;
+      currentDy = 0;
+      
+      if (x < edgeZone) currentDx = -panSpeed;
+      else if (x > size.x - edgeZone) currentDx = panSpeed;
+      
+      if (y < edgeZone) currentDy = -panSpeed;
+      else if (y > size.y - edgeZone) currentDy = panSpeed;
+    };
+    
+    const handleMouseOut = () => {
+      currentDx = 0;
+      currentDy = 0;
+    };
+
+    map.on('mousemove', handleMouseMove);
+    map.on('mouseout', handleMouseOut);
+    animationFrame = requestAnimationFrame(panStep);
+    
+    return () => {
+      map.off('mousemove', handleMouseMove);
+      map.off('mouseout', handleMouseOut);
+      cancelAnimationFrame(animationFrame);
+    };
+  }, [map, drawMode]);
 
   // Fit bounds when farm or plots change
   useEffect(() => {
@@ -115,14 +162,13 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const [selectedPlot, setSelectedPlot] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDrawMode, setIsDrawMode] = useState(null);
+  const [redrawPlotId, setRedrawPlotId] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   
-  // Custom Acre Dimensions state
   const [isAcreModalOpen, setIsAcreModalOpen] = useState(false);
   const [customPreset, setCustomPreset] = useState({ name: '', length_ft: '', width_ft: '' });
   const [selectedPresetId, setSelectedPresetId] = useState('');
 
-  // Modal states
   const [isPlotModalOpen, setIsPlotModalOpen] = useState(false);
   const [pendingPlotGeoJSON, setPendingPlotGeoJSON] = useState(null);
   const [pendingPlotAcres, setPendingPlotAcres] = useState(0);
@@ -168,6 +214,12 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     if (mapRef.current) mapRef.current.pm.enableDraw('Polygon', { snappable: true, snapDistance: 20 });
   };
 
+  const startRedrawPlot = (plotId) => {
+    setRedrawPlotId(plotId);
+    setIsDrawMode('redraw_plot');
+    if (mapRef.current) mapRef.current.pm.enableDraw('Polygon', { snappable: true, snapDistance: 20 });
+  };
+
   const startAcreBoxTool = () => {
     if (!selectedPresetId) {
       alert('Please select or create an Acre Preset first.');
@@ -179,6 +231,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
 
   const cancelDraw = () => {
     setIsDrawMode(null);
+    setRedrawPlotId(null);
     if (mapRef.current) mapRef.current.pm.disableDraw();
   };
 
@@ -192,11 +245,24 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
         longitude: lng
       }).eq('id', numericFarmId);
       if (error) throw error;
-      alert('Farm boundary saved! It will appear after data refreshes.');
+      alert('Farm boundary saved!');
     } catch (err) {
       alert('Error saving farm boundary: ' + err.message);
     }
   }, [numericFarmId]);
+
+  const handleDeleteFarmBoundary = async () => {
+    if (!window.confirm("Are you sure you want to delete the farm boundary? The plots inside will remain.")) return;
+    try {
+      const { error } = await supabase.from('farms').update({
+        boundary: null,
+      }).eq('id', numericFarmId);
+      if (error) throw error;
+      alert('Farm boundary deleted.');
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
 
   const handlePlotCreated = useCallback((geojson, acres) => {
     setIsDrawMode(null);
@@ -204,6 +270,34 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     setPendingPlotAcres(acres);
     setIsPlotModalOpen(true);
   }, []);
+
+  const handlePlotRedrawn = useCallback(async (geojson, acres) => {
+    setIsDrawMode(null);
+    if (!redrawPlotId) return;
+    try {
+      const { error } = await supabase.from('farm_plots').update({
+        boundary: geojson,
+        area_acres: acres
+      }).eq('id', redrawPlotId);
+      if (error) throw error;
+      setRedrawPlotId(null);
+      alert('Plot boundary updated!');
+    } catch (err) {
+      alert('Error updating boundary: ' + err.message);
+    }
+  }, [redrawPlotId]);
+
+  const handleDeletePlot = async (plotId) => {
+    if (!window.confirm("Are you sure you want to completely delete this plot?")) return;
+    try {
+      const { error } = await supabase.from('farm_plots').delete().eq('id', plotId);
+      if (error) throw error;
+      if (selectedPlot?.id === plotId) setSelectedPlot(null);
+      alert('Plot deleted successfully.');
+    } catch (err) {
+      alert('Error deleting plot: ' + err.message);
+    }
+  };
 
   const handleAcreBoxClick = useCallback((latlng) => {
     const preset = acrePresets.find(p => p.id === parseInt(selectedPresetId));
@@ -335,7 +429,6 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
             </button>
           </div>
           
-          {/* Toggle Sidebar Button overlay (desktop only) */}
           <div className="absolute bottom-6 right-4 z-[400] hidden lg:block">
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -353,6 +446,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
               farm={farm} plots={plots} drawMode={isDrawMode} 
               onPlotCreated={handlePlotCreated}
               onFarmBoundaryCreated={handleFarmBoundaryCreated}
+              onPlotRedrawn={handlePlotRedrawn}
               onAcreBoxClick={handleAcreBoxClick}
               mapRef={mapRef}
             />
@@ -410,13 +504,16 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
               
               {!farm.boundary ? (
                 <Button variant="primary" className="w-full" onClick={startDrawFarm} disabled={!!isDrawMode}>
-                  <IconMap size={16} /> Draw Boundary First
+                  <IconMap size={16} /> Draw Boundary
                 </Button>
               ) : (
                 <div className="flex flex-col gap-3">
                   <div className="flex gap-2">
                     <Button variant="outline" className="flex-1" onClick={startDrawPlot} disabled={!!isDrawMode}>
                       <IconPlus size={16} /> Draw Plot
+                    </Button>
+                    <Button variant="outline" className="text-expense border-expense/30 hover:bg-expense/10" onClick={handleDeleteFarmBoundary} title="Delete Farm Boundary">
+                      <IconTrash size={16} />
                     </Button>
                   </div>
                   
@@ -451,7 +548,9 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                   <p className="text-xs text-accent-blue font-medium bg-blue-50 p-2 rounded-md mb-2 border border-blue-100">
                     {isDrawMode === 'acre_box' 
                       ? 'Click anywhere inside the farm boundary to drop the acre box. It will automatically clip to the borders.' 
-                      : 'Click on the map to draw points. Connect back to the first point to finish.'}
+                      : isDrawMode === 'redraw_plot'
+                      ? 'Redraw the boundary for the selected plot.'
+                      : 'Click on the map to draw points. Move mouse to screen edges to scroll map. Connect back to the first point to finish.'}
                   </p>
                   <button onClick={cancelDraw} className="text-xs text-expense font-bold hover:underline">
                     Cancel Tool
@@ -527,6 +626,15 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                               <span className={`font-bold ${totalRev - totalExp >= 0 ? 'text-revenue' : 'text-expense'}`}>
                                 {formatPKR(totalRev - totalExp)}
                               </span>
+                            </div>
+                            
+                            <div className="flex gap-2 pt-2 border-t border-border mt-2">
+                              <Button variant="outline" className="flex-1 py-1 text-xs h-7" onClick={(e) => { e.stopPropagation(); startRedrawPlot(plot.id); }}>
+                                <IconEdit size={14} className="mr-1" /> Redraw
+                              </Button>
+                              <Button variant="outline" className="flex-1 py-1 text-xs h-7 text-expense border-expense/30 hover:bg-expense/10" onClick={(e) => { e.stopPropagation(); handleDeletePlot(plot.id); }}>
+                                <IconTrash size={14} className="mr-1" /> Delete
+                              </Button>
                             </div>
                           </div>
                         )}
