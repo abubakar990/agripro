@@ -696,9 +696,35 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                 </span>
               </div>
               
+              <div className="border border-border rounded-lg p-3 bg-bg-alt mb-3">
+                <div className="text-xs font-bold text-text-secondary uppercase mb-2 flex justify-between items-center">
+                  <span>Acre Dimension (For Auto-Plots)</span>
+                  <button onClick={() => setIsAcreModalOpen(true)} className="text-primary hover:underline flex items-center gap-1">
+                    <IconDeviceFloppy size={12}/> New
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <select 
+                    className="agri-input h-9 text-xs flex-1 px-2"
+                    value={selectedPresetId}
+                    onChange={(e) => setSelectedPresetId(e.target.value)}
+                  >
+                    <option value="">-- Select Dimension --</option>
+                    {acrePresets.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.length_ft}' x {p.width_ft}')</option>
+                    ))}
+                  </select>
+                  {farm.boundary && (
+                    <Button variant="primary" className="px-2" onClick={startAcreBoxTool} disabled={!!isDrawMode || !selectedPresetId} title="Place single Acre Box">
+                      <IconSquarePlus size={16} /> Place
+                    </Button>
+                  )}
+                </div>
+              </div>
+
               {!farm.boundary ? (
                 <Button variant="primary" className="w-full" onClick={startDrawFarm} disabled={!!isDrawMode}>
-                  <IconMap size={16} /> Draw Boundary
+                  <IconMap size={16} /> Draw First Farm Boundary
                 </Button>
               ) : (
                 <div className="flex flex-col gap-3">
@@ -769,30 +795,6 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                     </div>
                   )}
                   
-                  
-                  <div className="border border-border rounded-lg p-3 bg-bg-alt">
-                    <div className="text-xs font-bold text-text-secondary uppercase mb-2 flex justify-between items-center">
-                      <span>Place Acre Box</span>
-                      <button onClick={() => setIsAcreModalOpen(true)} className="text-primary hover:underline flex items-center gap-1">
-                        <IconDeviceFloppy size={12}/> New
-                      </button>
-                    </div>
-                    <div className="flex gap-2">
-                      <select 
-                        className="agri-input h-9 text-xs flex-1 px-2"
-                        value={selectedPresetId}
-                        onChange={(e) => setSelectedPresetId(e.target.value)}
-                      >
-                        <option value="">-- Select Dimension --</option>
-                        {acrePresets.map(p => (
-                          <option key={p.id} value={p.id}>{p.name} ({p.length_ft}' x {p.width_ft}')</option>
-                        ))}
-                      </select>
-                      <Button variant="primary" className="px-2" onClick={startAcreBoxTool} disabled={!!isDrawMode || !selectedPresetId}>
-                        <IconSquarePlus size={16} /> Place
-                      </Button>
-                    </div>
-                  </div>
                 </div>
               )}
 
