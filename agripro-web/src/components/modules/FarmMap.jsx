@@ -4,7 +4,7 @@ import L from 'leaflet';
 import '@geoman-io/leaflet-geoman-free';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { calculateAcresFromLatLngs, layerToGeoJSON, geoJSONToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM, TILE_LAYERS, createIntersectedAcreBox } from '../../utils/geoUtils';
+import { calculateAcresFromLatLngs, layerToGeoJSON, geoJSONToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM, TILE_LAYERS, createIntersectedAcreBox, addPolygonToFeatureCollection, autoGeneratePlotsForBoundary } from '../../utils/geoUtils';
 import { getPlotScore, getScoreColor, getScoreLabel } from '../../utils/perAcreCalc';
 import { formatPKR } from '../../utils/format';
 import Modal from '../shared/Modal';
@@ -159,7 +159,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const navigate = useNavigate();
   const mapRef = useRef(null);
   const plotLayersRef = useRef({});
-  const farmLayerRef = useRef(null);
+  const farmLayerRef = useRef([]);
   
   const [mapType, setMapType] = useState('hybrid');
   const [selectedPlot, setSelectedPlot] = useState(null);
@@ -201,22 +201,33 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
 
   // Manage Geoman Edit Mode
   useEffect(() => {
-    if (farmLayerRef.current) {
+    if (farmLayerRef.current && Array.isArray(farmLayerRef.current)) {
       if (adjustingFarmBoundary) {
-        farmLayerRef.current.pm.enable({ allowSelfIntersection: false, preventMarkerRemoval: false });
-        const updateArea = () => {
-          try {
-            const acres = calculateAcresFromLatLngs(farmLayerRef.current.getLatLngs()[0]);
-            setDynamicAreaAcres(acres);
-          } catch(e) {}
-        };
-        farmLayerRef.current.on('pm:markerdrag', updateArea);
-        farmLayerRef.current.on('pm:edit', updateArea);
-        updateArea();
+        farmLayerRef.current.forEach(layer => {
+          if (layer && layer.pm) {
+            layer.pm.enable({ allowSelfIntersection: false, preventMarkerRemoval: false });
+            const updateArea = () => {
+              try {
+                let totalAcres = 0;
+                farmLayerRef.current.forEach(l => {
+                  if (l) totalAcres += calculateAcresFromLatLngs(l.getLatLngs()[0]);
+                });
+                setDynamicAreaAcres(totalAcres);
+              } catch(e) {}
+            };
+            layer.on('pm:markerdrag', updateArea);
+            layer.on('pm:edit', updateArea);
+            updateArea();
+          }
+        });
       } else {
-        farmLayerRef.current.pm.disable();
-        farmLayerRef.current.off('pm:markerdrag');
-        farmLayerRef.current.off('pm:edit');
+        farmLayerRef.current.forEach(layer => {
+          if (layer && layer.pm) {
+            layer.pm.disable();
+            layer.off('pm:markerdrag');
+            layer.off('pm:edit');
+          }
+        });
         if (!adjustingPlotId) setDynamicAreaAcres(null);
       }
     }
@@ -301,34 +312,73 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const handleFarmBoundaryCreated = useCallback(async (geojson, acres, lat, lng) => {
     setIsDrawMode(null);
     try {
+      const newBoundary = addPolygonToFeatureCollection(farm?.boundary, geojson);
+      const newTotalAcres = (parseFloat(farm?.area_acres) || 0) + acres;
+      
       const { error } = await supabase.from('farms').update({
-        boundary: geojson,
-        area_acres: acres,
-        latitude: lat,
-        longitude: lng
+        boundary: newBoundary,
+        area_acres: newTotalAcres,
+        latitude: farm?.latitude || lat,
+        longitude: farm?.longitude || lng
       }).eq('id', numericFarmId);
+      
       if (error) throw error;
+      
+      // Auto-generate plots if a preset is selected
+      if (selectedPresetId) {
+        const preset = acrePresets.find(p => p.id === parseInt(selectedPresetId));
+        if (preset && window.confirm(`Would you like to automatically fill this new boundary with ${preset.name} (${preset.length_ft}' x ${preset.width_ft}') plots?`)) {
+           const generatedPlots = autoGeneratePlotsForBoundary(geojson, parseFloat(preset.length_ft), parseFloat(preset.width_ft));
+           
+           if (generatedPlots.length > 0) {
+             const insertData = generatedPlots.map((p, idx) => ({
+               farm_id: numericFarmId,
+               name: `${preset.name} ${plots.length + idx + 1}`,
+               boundary: p.geojson,
+               area_acres: p.acres,
+               soil_type: 'Loamy',
+               soil_quality: 'Good',
+               drainage: 'Good'
+             }));
+             const { error: insertErr } = await supabase.from('farm_plots').insert(insertData);
+             if (insertErr) throw insertErr;
+             alert(`Farm boundary added and ${generatedPlots.length} plots auto-generated!`);
+             return;
+           } else {
+             alert('Farm boundary added, but the area was too small or irregular to generate grid plots.');
+           }
+        }
+      }
+      
       alert('Farm boundary saved!');
     } catch (err) {
       alert('Error saving farm boundary: ' + err.message);
     }
-  }, [numericFarmId]);
+  }, [numericFarmId, farm, selectedPresetId, acrePresets, plots]);
 
   const handleSaveFarmAdjustment = async () => {
-    if (!farmLayerRef.current) return;
+    if (!farmLayerRef.current || !Array.isArray(farmLayerRef.current)) return;
     try {
-      const layer = farmLayerRef.current;
-      const geojson = layerToGeoJSON(layer);
-      const latLngs = layer.getLatLngs()[0];
-      const acres = calculateAcresFromLatLngs(latLngs);
-      const bounds = layer.getBounds();
-      const center = bounds.getCenter();
+      let totalAcres = 0;
+      let center = null;
+      let features = [];
+      
+      farmLayerRef.current.forEach(layer => {
+        if (!layer) return;
+        const geojson = layerToGeoJSON(layer);
+        const latLngs = layer.getLatLngs()[0];
+        totalAcres += calculateAcresFromLatLngs(latLngs);
+        features.push({ type: 'Feature', geometry: geojson });
+        if (!center) center = layer.getBounds().getCenter();
+      });
+      
+      const finalBoundary = features.length === 1 ? features[0].geometry : { type: 'FeatureCollection', features };
 
       const { error } = await supabase.from('farms').update({
-        boundary: geojson,
-        area_acres: acres,
-        latitude: center.lat,
-        longitude: center.lng
+        boundary: finalBoundary,
+        area_acres: totalAcres,
+        latitude: center?.lat || farm.latitude,
+        longitude: center?.lng || farm.longitude
       }).eq('id', numericFarmId);
       if (error) throw error;
       
@@ -562,16 +612,27 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
 
             {farm.boundary && (() => {
               try {
-                const positions = geoJSONToLatLngs(farm.boundary);
-                if (positions.length > 0) {
-                  return (
-                    <Polygon 
-                      positions={positions} 
-                      pathOptions={{ color: '#1a4d2e', weight: 3, dashArray: '5, 10', fillOpacity: 0.05, fillColor: '#1a4d2e' }}
-                      ref={(ref) => { farmLayerRef.current = ref; }}
-                    />
-                  );
-                }
+                const features = farm.boundary.type === 'FeatureCollection' ? farm.boundary.features : [{ geometry: farm.boundary }];
+                
+                return features.map((f, idx) => {
+                  const positions = geoJSONToLatLngs(f.geometry);
+                  if (positions.length > 0) {
+                    return (
+                      <Polygon 
+                        key={`farm-bound-${idx}`}
+                        positions={positions} 
+                        pathOptions={{ color: '#1a4d2e', weight: 3, dashArray: '5, 10', fillOpacity: 0.05, fillColor: '#1a4d2e' }}
+                        ref={(ref) => { 
+                          if (ref) { 
+                            if (!farmLayerRef.current || !Array.isArray(farmLayerRef.current)) farmLayerRef.current = []; 
+                            farmLayerRef.current[idx] = ref; 
+                          } 
+                        }}
+                      />
+                    );
+                  }
+                  return null;
+                });
               } catch (e) {}
               return null;
             })()}
@@ -639,9 +700,12 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                       </div>
                     </div>
                   ) : (
-                    <div className="flex gap-2">
-                      <Button variant="outline" className="flex-1" onClick={startDrawPlot} disabled={!!isDrawMode}>
-                        <IconPlus size={16} /> Draw Plot
+                    <div className="flex gap-1 flex-wrap">
+                      <Button variant="outline" className="flex-1 px-2 text-xs" onClick={startDrawFarm} disabled={!!isDrawMode}>
+                        <IconMap size={14} /> Add Area
+                      </Button>
+                      <Button variant="outline" className="flex-1 px-2 text-xs" onClick={startDrawPlot} disabled={!!isDrawMode}>
+                        <IconPlus size={14} /> Draw Plot
                       </Button>
                       <Button variant="outline" className="px-2" onClick={() => setAdjustingFarmBoundary(true)} title="Adjust Farm Boundary">
                         <IconDragDrop size={16} className="text-primary"/>

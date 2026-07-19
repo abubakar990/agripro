@@ -5,6 +5,8 @@ import * as turf from '@turf/helpers';
 import intersect from '@turf/intersect';
 import area from '@turf/area';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
+import booleanIntersects from '@turf/boolean-intersects';
+import bbox from '@turf/bbox';
 
 /**
  * Calculate area in acres from an array of [lat, lng] coordinates
@@ -41,13 +43,18 @@ export const layerToGeoJSON = (layer) => {
 };
 
 export const geoJSONToLatLngs = (geoJSON) => {
-  if (!geoJSON || !geoJSON.coordinates) return [];
-  // For MultiPolygon we'd need more logic, assuming simple Polygon here
+  if (!geoJSON) return [];
+  
+  if (geoJSON.type === 'FeatureCollection') {
+    return geoJSON.features.map(f => geoJSONToLatLngs(f.geometry)[0]);
+  }
+  
+  if (!geoJSON.coordinates) return [];
+  
   if (geoJSON.type === 'Polygon') {
-    return geoJSON.coordinates[0].map(coord => [coord[1], coord[0]]);
+    return [geoJSON.coordinates[0].map(coord => [coord[1], coord[0]])];
   } else if (geoJSON.type === 'MultiPolygon') {
-      // Just return the first polygon ring for display simplicity if it's a multipolygon
-      return geoJSON.coordinates[0][0].map(coord => [coord[1], coord[0]]);
+    return geoJSON.coordinates.map(polygon => polygon[0].map(coord => [coord[1], coord[0]]));
   }
   return [];
 };
@@ -111,6 +118,77 @@ export const createIntersectedAcreBox = (latLng, lengthFt, widthFt, farmBoundary
   } catch (err) {
     console.error('Turf intersection error:', err);
     return { error: 'Failed to calculate intersection' };
+  }
+};
+
+export const addPolygonToFeatureCollection = (existingGeoJSON, newPolygonGeoJSON) => {
+  const newFeature = turf.feature(newPolygonGeoJSON);
+  
+  if (!existingGeoJSON) {
+    return turf.featureCollection([newFeature]).geometry;
+  }
+  
+  try {
+    let features = [];
+    if (existingGeoJSON.type === 'FeatureCollection') {
+      features = [...existingGeoJSON.features, newFeature];
+    } else if (existingGeoJSON.type === 'Feature') {
+      features = [existingGeoJSON, newFeature];
+    } else {
+      features = [turf.feature(existingGeoJSON), newFeature];
+    }
+    return turf.featureCollection(features).geometry;
+  } catch (e) {
+    return turf.featureCollection([newFeature]).geometry;
+  }
+};
+
+export const autoGeneratePlotsForBoundary = (farmBoundaryGeoJSON, lengthFt, widthFt) => {
+  if (!farmBoundaryGeoJSON || !lengthFt || !widthFt) return [];
+  
+  try {
+    const farmFeature = turf.feature(farmBoundaryGeoJSON);
+    const [minLng, minLat, maxLng, maxLat] = bbox(farmFeature);
+    
+    // Degrees per foot roughly
+    const latOffsetPerFt = 1 / 364000;
+    const midLat = (minLat + maxLat) / 2;
+    const lngOffsetPerFt = 1 / (Math.cos(midLat * Math.PI / 180) * 364000);
+    
+    const stepLat = lengthFt * latOffsetPerFt;
+    const stepLng = widthFt * lngOffsetPerFt;
+    
+    const plots = [];
+    
+    for (let lat = minLat; lat < maxLat; lat += stepLat) {
+      for (let lng = minLng; lng < maxLng; lng += stepLng) {
+        const boxGeoJSON = turf.polygon([[
+          [lng, lat],
+          [lng + stepLng, lat],
+          [lng + stepLng, lat + stepLat],
+          [lng, lat + stepLat],
+          [lng, lat] // close
+        ]]);
+        
+        if (booleanIntersects(boxGeoJSON, farmFeature)) {
+          const intersection = intersect(turf.featureCollection([boxGeoJSON, farmFeature]));
+          if (intersection) {
+            const areaSqMeters = area(intersection);
+            const acres = Math.round((areaSqMeters / 4046.8564224) * 100) / 100;
+            if (acres > 0.05) { // min 0.05 acres to avoid tiny slivers
+              plots.push({
+                geojson: intersection.geometry,
+                acres: acres
+              });
+            }
+          }
+        }
+      }
+    }
+    return plots;
+  } catch (err) {
+    console.error('Auto grid error:', err);
+    return [];
   }
 };
 
