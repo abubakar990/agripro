@@ -1,23 +1,27 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Polygon, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import '@geoman-io/leaflet-geoman-free';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { calculateAcresFromLatLngs, layerToGeoJSON, geoJSONToLatLngs, DEFAULT_CENTER, DEFAULT_ZOOM, TILE_LAYERS } from '../../utils/geoUtils';
-import { getPlotScore, getScoreColor, getScoreLabel, formatPerAcre } from '../../utils/perAcreCalc';
+import { getPlotScore, getScoreColor, getScoreLabel } from '../../utils/perAcreCalc';
 import { formatPKR } from '../../utils/format';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
-import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconDroplet, IconPlant, IconMapPin } from '@tabler/icons-react';
+import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin } from '@tabler/icons-react';
 
-// A component to manage geoman controls and map fitting
-const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated }) => {
+// Inner component that has access to the map instance via useMap()
+const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, mapRef }) => {
   const map = useMap();
   
+  // Store map reference for parent access
   useEffect(() => {
-    // Add PM controls
+    if (mapRef) mapRef.current = map;
+  }, [map, mapRef]);
+
+  useEffect(() => {
     map.pm.addControls({
       position: 'topleft',
       drawCircle: false,
@@ -25,7 +29,7 @@ const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCre
       drawMarker: false,
       drawPolyline: false,
       drawRectangle: false,
-      drawPolygon: false, // We'll trigger this manually via buttons
+      drawPolygon: false,
       drawText: false,
       editMode: false,
       dragMode: false,
@@ -43,10 +47,8 @@ const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCre
     const handleCreate = (e) => {
       const layer = e.layer;
       const geojson = layerToGeoJSON(layer);
-      const latLngs = layer.getLatLngs()[0]; // Assumes single polygon ring
+      const latLngs = layer.getLatLngs()[0];
       const acres = calculateAcresFromLatLngs(latLngs);
-      
-      // Calculate center of polygon for farm
       const bounds = layer.getBounds();
       const center = bounds.getCenter();
 
@@ -56,46 +58,48 @@ const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCre
         onPlotCreated(geojson, acres);
       }
       
-      // Remove the drawn layer immediately since we will re-render from state/DB
       map.removeLayer(layer);
     };
 
     map.on('pm:create', handleCreate);
-
-    return () => {
-      map.off('pm:create', handleCreate);
-    };
+    return () => { map.off('pm:create', handleCreate); };
   }, [map, drawMode, onPlotCreated, onFarmBoundaryCreated]);
 
   // Fit bounds when farm or plots change
   useEffect(() => {
-    if (farm?.boundary) {
-      const bounds = L.geoJSON(farm.boundary).getBounds();
-      map.fitBounds(bounds, { padding: [20, 20] });
-    } else if (farm?.latitude && farm?.longitude) {
-      map.setView([farm.latitude, farm.longitude], 15);
-    } else if (plots && plots.length > 0) {
-      const allPolygons = L.featureGroup(
-        plots.map(p => p.boundary ? L.geoJSON(p.boundary) : null).filter(Boolean)
-      );
-      if (allPolygons.getLayers().length > 0) {
-          map.fitBounds(allPolygons.getBounds(), { padding: [20, 20] });
+    try {
+      if (farm?.boundary) {
+        const geoLayer = L.geoJSON({ type: 'Feature', geometry: farm.boundary });
+        const bounds = geoLayer.getBounds();
+        if (bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30] });
+      } else if (farm?.latitude && farm?.longitude) {
+        map.setView([parseFloat(farm.latitude), parseFloat(farm.longitude)], 15);
+      } else if (plots && plots.length > 0) {
+        const validPlots = plots.filter(p => p.boundary);
+        if (validPlots.length > 0) {
+          const group = L.featureGroup(
+            validPlots.map(p => L.geoJSON({ type: 'Feature', geometry: p.boundary }))
+          );
+          const bounds = group.getBounds();
+          if (bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30] });
+        }
       }
-    } else {
-      map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    } catch (err) {
+      console.warn('Map fit bounds error:', err);
     }
-  }, [map, farm, plots]);
+  }, [map, farm?.boundary, farm?.latitude, farm?.longitude, plots]);
 
   return null;
 };
 
-const FarmMap = ({ farms, farmPlots, cropCycles, expenses, revenue }) => {
+const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], revenue = [] }) => {
   const { farmId } = useParams();
   const navigate = useNavigate();
+  const mapRef = useRef(null);
   const [mapType, setMapType] = useState('satellite');
   const [selectedPlot, setSelectedPlot] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isDrawMode, setIsDrawMode] = useState(null); // 'farm' | 'plot' | null
+  const [isDrawMode, setIsDrawMode] = useState(null);
   
   // Modal states
   const [isPlotModalOpen, setIsPlotModalOpen] = useState(false);
@@ -110,62 +114,56 @@ const FarmMap = ({ farms, farmPlots, cropCycles, expenses, revenue }) => {
     notes: ''
   });
 
-  const farm = useMemo(() => farms.find(f => f.id === farmId), [farms, farmId]);
-  const plots = useMemo(() => farmPlots.filter(p => p.farm_id === farmId), [farmPlots, farmId]);
+  // Parse farmId as integer for comparison with farm.id
+  const numericFarmId = parseInt(farmId);
+  
+  const farm = useMemo(() => farms.find(f => f.id === numericFarmId), [farms, numericFarmId]);
+  const plots = useMemo(() => farmPlots.filter(p => p.farm_id === numericFarmId), [farmPlots, numericFarmId]);
 
   const mapCenter = useMemo(() => {
-    if (farm?.latitude && farm?.longitude) return [farm.latitude, farm.longitude];
-    return DEFAULT_CENTER; // [31.4187, 73.0791] default
+    if (farm?.latitude && farm?.longitude) return [parseFloat(farm.latitude), parseFloat(farm.longitude)];
+    return DEFAULT_CENTER;
   }, [farm]);
 
   // Handle Search Location
   const handleSearch = async (e) => {
     e.preventDefault();
-    if (!searchQuery) return;
+    if (!searchQuery.trim()) return;
     try {
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
       const data = await res.json();
-      if (data && data.length > 0) {
-        // Dispatch custom event to map to flyTo this location
-        const mapEl = document.getElementById('farm-map-container');
-        if (mapEl) {
-          const mapInstance = mapEl._leaflet_map;
-          if (mapInstance) {
-            mapInstance.flyTo([data[0].lat, data[0].lon], 15);
-          }
-        }
+      if (data && data.length > 0 && mapRef.current) {
+        mapRef.current.flyTo([parseFloat(data[0].lat), parseFloat(data[0].lon)], 15);
       }
     } catch (err) {
       console.error('Search failed', err);
     }
   };
 
-  // Turn on draw mode for Farm
+  // Draw mode controls
   const startDrawFarm = () => {
     setIsDrawMode('farm');
-    const mapEl = document.getElementById('farm-map-container');
-    if (mapEl?._leaflet_map) {
-      mapEl._leaflet_map.pm.enableDraw('Polygon', {
-        snappable: true,
-        snapDistance: 20,
-      });
+    if (mapRef.current) {
+      mapRef.current.pm.enableDraw('Polygon', { snappable: true, snapDistance: 20 });
     }
   };
 
-  // Turn on draw mode for Plot
   const startDrawPlot = () => {
     setIsDrawMode('plot');
-    const mapEl = document.getElementById('farm-map-container');
-    if (mapEl?._leaflet_map) {
-      mapEl._leaflet_map.pm.enableDraw('Polygon', {
-        snappable: true,
-        snapDistance: 20,
-      });
+    if (mapRef.current) {
+      mapRef.current.pm.enableDraw('Polygon', { snappable: true, snapDistance: 20 });
+    }
+  };
+
+  const cancelDraw = () => {
+    setIsDrawMode(null);
+    if (mapRef.current) {
+      mapRef.current.pm.disableDraw();
     }
   };
 
   // When Farm boundary is created
-  const handleFarmBoundaryCreated = async (geojson, acres, lat, lng) => {
+  const handleFarmBoundaryCreated = useCallback(async (geojson, acres, lat, lng) => {
     setIsDrawMode(null);
     try {
       const { error } = await supabase.from('farms').update({
@@ -173,31 +171,29 @@ const FarmMap = ({ farms, farmPlots, cropCycles, expenses, revenue }) => {
         area_acres: acres,
         latitude: lat,
         longitude: lng
-      }).eq('id', farmId);
+      }).eq('id', numericFarmId);
       if (error) throw error;
-      // You'll need to refresh parent or hope realtime subscriptions pick it up
-      // If we don't have realtime here, we might just alert success
-      alert('Farm boundary saved successfully!');
+      alert('Farm boundary saved! It will appear after data refreshes.');
     } catch (err) {
       console.error(err);
-      alert('Error saving farm boundary');
+      alert('Error saving farm boundary: ' + err.message);
     }
-  };
+  }, [numericFarmId]);
 
-  // When Plot boundary is created, show modal
-  const handlePlotCreated = (geojson, acres) => {
+  // When Plot boundary is created
+  const handlePlotCreated = useCallback((geojson, acres) => {
     setIsDrawMode(null);
     setPendingPlotGeoJSON(geojson);
     setPendingPlotAcres(acres);
     setIsPlotModalOpen(true);
-  };
+  }, []);
 
-  // Save Plot form
+  // Save Plot
   const handleSavePlot = async (e) => {
     e.preventDefault();
     try {
       const { error } = await supabase.from('farm_plots').insert([{
-        farm_id: farmId,
+        farm_id: numericFarmId,
         boundary: pendingPlotGeoJSON,
         area_acres: pendingPlotAcres,
         ...plotFormData
@@ -205,33 +201,31 @@ const FarmMap = ({ farms, farmPlots, cropCycles, expenses, revenue }) => {
       if (error) throw error;
       
       setIsPlotModalOpen(false);
-      setPlotFormData({
-        name: '',
-        soil_type: 'Loamy',
-        soil_quality: 'Good',
-        drainage: 'Good',
-        water_source: '',
-        notes: ''
-      });
+      setPlotFormData({ name: '', soil_type: 'Loamy', soil_quality: 'Good', drainage: 'Good', water_source: '', notes: '' });
       setPendingPlotGeoJSON(null);
       setPendingPlotAcres(0);
       alert('Plot created successfully!');
     } catch (err) {
       console.error(err);
-      alert('Error saving plot');
+      alert('Error saving plot: ' + err.message);
     }
   };
 
   if (!farm) {
     return (
-      <div className="flex flex-col items-center justify-center h-64">
-        <p>Farm not found...</p>
-        <Button variant="ghost" onClick={() => navigate('/farms')}>Back to Farms</Button>
+      <div className="flex flex-col items-center justify-center h-64 agri-card p-12">
+        <IconMap size={48} className="text-text-muted mb-4" />
+        <p className="text-lg font-bold text-text-primary mb-2">Farm not found</p>
+        <p className="text-sm text-text-muted mb-4">The farm may have been deleted or the link is invalid.</p>
+        <Button variant="primary" onClick={() => navigate('/farms')}>
+          <IconArrowLeft size={16} /> Back to Farms
+        </Button>
       </div>
     );
   }
 
   const totalFarmAcres = farm.area_acres || plots.reduce((sum, p) => sum + (parseFloat(p.area_acres) || 0), 0);
+  const tileUrl = mapType === 'satellite' ? TILE_LAYERS.satellite.url : TILE_LAYERS.street.url;
 
   return (
     <div className="flex flex-col h-full space-y-4">
@@ -242,35 +236,35 @@ const FarmMap = ({ farms, farmPlots, cropCycles, expenses, revenue }) => {
         <h2 className="text-xl font-bold text-text-primary">Map View: {farm.name}</h2>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-4 h-full">
+      <div className="flex flex-col lg:flex-row gap-4 flex-1">
         {/* MAP CONTAINER */}
-        <div className="flex-1 agri-card relative overflow-hidden farm-map-container h-[calc(100vh-180px)] rounded-xl border border-border-light z-0">
+        <div className="flex-1 agri-card relative overflow-hidden farm-map-container rounded-xl border border-border" style={{ height: 'calc(100vh - 200px)', minHeight: '400px' }}>
           
           {/* Top Controls Overlay */}
           <div className="absolute top-4 left-14 z-[400] flex flex-col gap-2">
-            <form onSubmit={handleSearch} className="flex bg-bg shadow-md rounded-md overflow-hidden border border-border-light">
+            <form onSubmit={handleSearch} className="flex bg-white shadow-md rounded-md overflow-hidden border border-border">
               <input 
                 type="text" 
                 placeholder="Search location..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="px-3 py-2 text-sm outline-none w-48 text-text-primary bg-bg"
+                className="px-3 py-2 text-sm outline-none w-48 text-text-primary bg-white"
               />
-              <button type="submit" className="px-3 bg-bg-alt hover:bg-border-light text-text-muted transition-colors">
+              <button type="submit" className="px-3 hover:bg-bg text-text-muted transition-colors">
                 <IconSearch size={16} />
               </button>
             </form>
           </div>
 
-          <div className="absolute top-4 right-4 z-[400] bg-bg rounded-md shadow-md border border-border-light overflow-hidden flex">
+          <div className="absolute top-4 right-4 z-[400] bg-white rounded-md shadow-md border border-border overflow-hidden flex">
             <button 
-              className={`px-3 py-2 text-sm font-medium ${mapType === 'satellite' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-bg-alt'}`}
+              className={`px-3 py-2 text-sm font-medium ${mapType === 'satellite' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-bg'}`}
               onClick={() => setMapType('satellite')}
             >
               Satellite
             </button>
             <button 
-              className={`px-3 py-2 text-sm font-medium ${mapType === 'street' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-bg-alt'}`}
+              className={`px-3 py-2 text-sm font-medium ${mapType === 'street' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-bg'}`}
               onClick={() => setMapType('street')}
             >
               Street
@@ -278,14 +272,12 @@ const FarmMap = ({ farms, farmPlots, cropCycles, expenses, revenue }) => {
           </div>
 
           <MapContainer 
-            id="farm-map-container"
             center={mapCenter} 
             zoom={DEFAULT_ZOOM} 
             style={{ height: '100%', width: '100%', zIndex: 0 }}
-            ref={(mapRef) => { if(mapRef) { document.getElementById('farm-map-container')._leaflet_map = mapRef; } }}
           >
             <TileLayer
-              url={mapType === 'satellite' ? TILE_LAYERS.satellite : TILE_LAYERS.street}
+              url={tileUrl}
               maxZoom={20}
               attribution='&copy; OpenStreetMap & Esri'
             />
@@ -296,49 +288,63 @@ const FarmMap = ({ farms, farmPlots, cropCycles, expenses, revenue }) => {
               drawMode={isDrawMode} 
               onPlotCreated={handlePlotCreated}
               onFarmBoundaryCreated={handleFarmBoundaryCreated}
+              mapRef={mapRef}
             />
 
             {/* Farm Boundary */}
-            {farm.boundary && (
-              <Polygon 
-                positions={geoJSONToLatLngs(farm.boundary)} 
-                pathOptions={{ color: '#1a4d2e', weight: 3, dashArray: '5, 10', fillOpacity: 0.1 }}
-              />
-            )}
+            {farm.boundary && (() => {
+              try {
+                const positions = geoJSONToLatLngs(farm.boundary);
+                if (positions.length > 0) {
+                  return (
+                    <Polygon 
+                      positions={positions} 
+                      pathOptions={{ color: '#1a4d2e', weight: 3, dashArray: '5, 10', fillOpacity: 0.05, fillColor: '#1a4d2e' }}
+                    />
+                  );
+                }
+              } catch (e) { console.warn('Farm boundary render error:', e); }
+              return null;
+            })()}
 
             {/* Plot Polygons */}
             {plots.map(plot => {
               if (!plot.boundary) return null;
               
-              const currentCycle = cropCycles.find(c => c.plot_id === plot.id && c.status === 'Active');
-              const plotScore = getPlotScore(plot, currentCycle, expenses, revenue);
-              const color = getScoreColor(plotScore);
-              
-              return (
-                <Polygon
-                  key={plot.id}
-                  positions={geoJSONToLatLngs(plot.boundary)}
-                  pathOptions={{ 
-                    color: color, 
-                    weight: 2, 
-                    fillColor: color, 
-                    fillOpacity: selectedPlot?.id === plot.id ? 0.6 : 0.4 
-                  }}
-                  eventHandlers={{
-                    click: () => setSelectedPlot(plot)
-                  }}
-                >
-                  <Popup>
-                    <div className="font-sans">
-                      <h3 className="font-bold text-text-primary m-0">{plot.name}</h3>
-                      <p className="text-xs text-text-muted m-0">{parseFloat(plot.area_acres).toFixed(2)} Acres</p>
-                      {currentCycle && (
-                        <p className="text-xs text-text-secondary mt-1">Crop: <strong>{currentCycle.crop_type}</strong></p>
-                      )}
-                    </div>
-                  </Popup>
-                </Polygon>
-              );
+              try {
+                const positions = geoJSONToLatLngs(plot.boundary);
+                if (positions.length === 0) return null;
+
+                const score = getPlotScore(plot.id, { expenses, revenue, cropCycles, farmPlots: plots, farms });
+                const color = getScoreColor(score);
+                
+                return (
+                  <Polygon
+                    key={plot.id}
+                    positions={positions}
+                    pathOptions={{ 
+                      color: color, 
+                      weight: 2, 
+                      fillColor: color, 
+                      fillOpacity: selectedPlot?.id === plot.id ? 0.6 : 0.35
+                    }}
+                    eventHandlers={{
+                      click: () => setSelectedPlot(plot)
+                    }}
+                  >
+                    <Popup>
+                      <div className="font-sans">
+                        <h3 className="font-bold text-sm m-0">{plot.name}</h3>
+                        <p className="text-xs text-gray-500 m-0">{parseFloat(plot.area_acres || 0).toFixed(2)} Acres</p>
+                        <p className="text-xs mt-1 m-0">Soil: {plot.soil_type || '—'} | Drainage: {plot.drainage || '—'}</p>
+                      </div>
+                    </Popup>
+                  </Polygon>
+                );
+              } catch (e) {
+                console.warn('Plot render error:', plot.id, e);
+                return null;
+              }
             })}
           </MapContainer>
         </div>
@@ -348,31 +354,36 @@ const FarmMap = ({ farms, farmPlots, cropCycles, expenses, revenue }) => {
           
           <div className="agri-card p-4">
             <h3 className="font-bold text-lg text-text-primary mb-1">{farm.name}</h3>
-            <div className="flex justify-between items-center text-sm mb-3 pb-3 border-b border-border-light">
+            <div className="flex justify-between items-center text-sm mb-3 pb-3 border-b border-border">
               <span className="text-text-muted flex items-center gap-1"><IconMapPin size={14}/> Area</span>
-              <span className="font-bold text-text-primary">{totalFarmAcres > 0 ? parseFloat(totalFarmAcres).toFixed(2) : '-'} Acres</span>
+              <span className="font-bold text-text-primary">{totalFarmAcres > 0 ? parseFloat(totalFarmAcres).toFixed(2) : '—'} Acres</span>
             </div>
             
             <div className="flex gap-2">
               {!farm.boundary ? (
-                <Button variant="primary" className="flex-1 w-full" onClick={startDrawFarm} disabled={isDrawMode}>
+                <Button variant="primary" className="flex-1 w-full" onClick={startDrawFarm} disabled={!!isDrawMode}>
                   <IconMap size={16} /> Draw Boundary
                 </Button>
               ) : (
-                <Button variant="outline" className="flex-1 w-full" onClick={startDrawPlot} disabled={isDrawMode}>
+                <Button variant="outline" className="flex-1 w-full" onClick={startDrawPlot} disabled={!!isDrawMode}>
                   <IconPlus size={16} /> Add Plot
                 </Button>
               )}
             </div>
             {isDrawMode && (
-              <p className="text-xs text-accent-blue mt-2 font-medium bg-blue-50 p-2 rounded-md">
-                Click on the map to draw. Connect back to the first point to finish.
-              </p>
+              <div className="mt-2">
+                <p className="text-xs text-accent-blue font-medium bg-blue-50 p-2 rounded-md mb-2">
+                  Click on the map to draw points. Connect back to the first point to finish.
+                </p>
+                <button onClick={cancelDraw} className="text-xs text-expense font-bold hover:underline">
+                  Cancel Drawing
+                </button>
+              </div>
             )}
           </div>
 
-          <div className="agri-card flex-1 flex flex-col overflow-hidden">
-            <div className="p-3 border-b border-border-light bg-bg-alt flex justify-between items-center">
+          <div className="agri-card flex-1 flex flex-col overflow-hidden" style={{ maxHeight: 'calc(100vh - 380px)' }}>
+            <div className="p-3 border-b border-border flex justify-between items-center">
               <span className="font-bold text-sm text-text-primary flex items-center gap-2">
                 <IconLayersIntersect size={16} className="text-primary"/> 
                 Plots ({plots.length})
@@ -383,47 +394,82 @@ const FarmMap = ({ farms, farmPlots, cropCycles, expenses, revenue }) => {
               {plots.length === 0 ? (
                 <div className="text-center py-8 opacity-50">
                   <IconLayersIntersect size={32} className="mx-auto mb-2" />
-                  <p className="text-sm">No plots mapped yet.</p>
+                  <p className="text-sm font-bold">No plots mapped yet.</p>
+                  <p className="text-xs text-text-muted mt-1">
+                    {farm.boundary ? 'Click "Add Plot" to subdivide your farm.' : 'Draw the farm boundary first.'}
+                  </p>
                 </div>
               ) : (
                 plots.map(plot => {
-                  const currentCycle = cropCycles.find(c => c.plot_id === plot.id && c.status === 'Active');
-                  const score = getPlotScore(plot, currentCycle, expenses, revenue);
+                  const activeCycle = cropCycles.find(c => c.plot_id === plot.id && c.status !== 'Harvested' && c.status !== 'Failed');
+                  const score = getPlotScore(plot.id, { expenses, revenue, cropCycles, farmPlots: plots, farms });
                   const isSelected = selectedPlot?.id === plot.id;
                   
+                  // Calculate plot-level financials
+                  const plotExpenses = expenses.filter(e => e.plot_id === plot.id);
+                  const plotRevenue = revenue.filter(r => r.plot_id === plot.id);
+                  const totalExp = plotExpenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+                  const totalRev = plotRevenue.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+                  const plotArea = parseFloat(plot.area_acres) || 0;
+
                   return (
                     <div 
                       key={plot.id} 
                       onClick={() => {
                         setSelectedPlot(plot);
-                        const mapEl = document.getElementById('farm-map-container');
-                        if (mapEl?._leaflet_map && plot.boundary) {
-                          const bounds = L.geoJSON(plot.boundary).getBounds();
-                          mapEl._leaflet_map.fitBounds(bounds, { padding: [20, 20] });
+                        if (mapRef.current && plot.boundary) {
+                          try {
+                            const bounds = L.geoJSON({ type: 'Feature', geometry: plot.boundary }).getBounds();
+                            if (bounds.isValid()) mapRef.current.fitBounds(bounds, { padding: [30, 30] });
+                          } catch (e) { /* ignore */ }
                         }
                       }}
-                      className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                        isSelected ? 'border-primary bg-primary/5' : 'border-border-light hover:border-primary/30'
+                      className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                        isSelected ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/30'
                       }`}
                     >
                       <div className="flex justify-between items-start mb-1">
                         <span className="font-bold text-text-primary text-sm">{plot.name}</span>
-                        <Badge variant={score > 70 ? 'success' : score > 40 ? 'warning' : 'danger'}>{getScoreLabel(score)}</Badge>
+                        <Badge variant={score !== null ? (score > 70 ? 'success' : score > 40 ? 'warning' : 'danger') : 'info'}>
+                          {getScoreLabel(score)}
+                        </Badge>
                       </div>
                       <div className="flex justify-between text-xs text-text-muted">
-                        <span>{parseFloat(plot.area_acres).toFixed(2)} Ac</span>
-                        <span>{currentCycle ? currentCycle.crop_type : 'Fallow'}</span>
+                        <span>{plotArea.toFixed(2)} Ac</span>
+                        <span>{activeCycle ? activeCycle.crop : 'Fallow'}</span>
                       </div>
                       
-                      {isSelected && currentCycle && (
-                        <div className="mt-3 pt-3 border-t border-border-light space-y-2">
+                      {isSelected && (
+                        <div className="mt-3 pt-3 border-t border-border space-y-2">
                           <div className="flex justify-between text-xs">
-                            <span className="text-text-muted">Est. Rev/Acre</span>
-                            <span className="font-medium text-revenue">{formatPKR(formatPerAcre(currentCycle.expected_yield * 2000, plot.area_acres))}</span>
+                            <span className="text-text-muted">Total Expense</span>
+                            <span className="font-medium text-expense">{formatPKR(totalExp)}</span>
                           </div>
                           <div className="flex justify-between text-xs">
-                            <span className="text-text-muted">Soil Type</span>
-                            <span className="font-medium">{plot.soil_type}</span>
+                            <span className="text-text-muted">Total Revenue</span>
+                            <span className="font-medium text-revenue">{formatPKR(totalRev)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-text-muted">Profit</span>
+                            <span className={`font-bold ${totalRev - totalExp >= 0 ? 'text-revenue' : 'text-expense'}`}>
+                              {formatPKR(totalRev - totalExp)}
+                            </span>
+                          </div>
+                          {plotArea > 0 && (
+                            <div className="flex justify-between text-xs pt-1 border-t border-border">
+                              <span className="text-text-muted">Profit/Acre</span>
+                              <span className={`font-bold ${totalRev - totalExp >= 0 ? 'text-revenue' : 'text-expense'}`}>
+                                {formatPKR((totalRev - totalExp) / plotArea)}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-xs">
+                            <span className="text-text-muted">Soil</span>
+                            <span className="font-medium">{plot.soil_type || '—'}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-text-muted">Drainage</span>
+                            <span className="font-medium">{plot.drainage || '—'}</span>
                           </div>
                         </div>
                       )}
@@ -477,11 +523,22 @@ const FarmMap = ({ farms, farmPlots, cropCycles, expenses, revenue }) => {
               </select>
             </div>
           </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="agri-label">Water Source</label>
+            <input 
+              type="text" 
+              className="agri-input" 
+              value={plotFormData.water_source} 
+              onChange={e => setPlotFormData({...plotFormData, water_source: e.target.value})} 
+              placeholder="e.g. Tube-well, Canal"
+            />
+          </div>
           
           <div className="flex flex-col gap-1">
             <label className="agri-label">Notes</label>
             <textarea 
-              className="agri-input h-20" 
+              className="agri-input min-h-[80px]" 
               value={plotFormData.notes} 
               onChange={e => setPlotFormData({...plotFormData, notes: e.target.value})} 
               placeholder="Any additional info..."
