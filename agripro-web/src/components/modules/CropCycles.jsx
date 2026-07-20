@@ -406,28 +406,48 @@ const CropCycles = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
-              <label className="agri-label">Plots (Hold Ctrl to select multiple)</label>
-              <select 
-                multiple
-                name="plot_ids" 
-                value={formData.plot_ids} 
-                onChange={(e) => {
-                  const selectedOptions = Array.from(e.target.selectedOptions).map(opt => parseInt(opt.value));
-                  const selectedPlots = farmPlots.filter(p => selectedOptions.includes(p.id));
-                  const totalAcres = selectedPlots.reduce((sum, p) => sum + (parseFloat(p.area_acres) || 0), 0);
-                  
-                  setFormData(prev => ({ 
-                    ...prev, 
-                    plot_ids: selectedOptions,
-                    area_acres: totalAcres > 0 ? totalAcres.toString() : prev.area_acres
-                  }));
-                }} 
-                className="agri-input h-24"
-              >
-                {farmPlots.filter(p => p.farm_id === parseInt(formData.farm_id)).map(p => (
-                  <option key={p.id} value={p.id}>{p.name} ({p.area_acres} ac)</option>
-                ))}
-              </select>
+              <label className="agri-label flex justify-between">
+                <span>Select Plots</span>
+                {formData.plot_ids.length > 0 && <span className="text-xs text-primary font-bold">{formData.plot_ids.length} selected</span>}
+              </label>
+              <div className="border border-border rounded-lg p-2 h-[100px] overflow-y-auto bg-white/50 flex flex-col gap-1 shadow-inner">
+                {farmPlots.filter(p => p.farm_id === parseInt(formData.farm_id)).length === 0 ? (
+                  <span className="text-xs text-text-muted italic p-2 flex items-center justify-center h-full">No plots available for this farm</span>
+                ) : (
+                  farmPlots.filter(p => p.farm_id === parseInt(formData.farm_id)).map(p => {
+                    const isSelected = formData.plot_ids.includes(p.id);
+                    return (
+                      <label key={p.id} className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors border ${isSelected ? 'bg-primary/5 border-primary/20' : 'hover:bg-bg-secondary border-transparent'}`}>
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300 text-primary focus:ring-primary w-4 h-4 cursor-pointer"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            const newSelected = e.target.checked 
+                              ? [...formData.plot_ids, p.id]
+                              : formData.plot_ids.filter(id => id !== p.id);
+                            
+                            const selectedPlots = farmPlots.filter(plot => newSelected.includes(plot.id));
+                            const totalAcres = selectedPlots.reduce((sum, plot) => sum + (parseFloat(plot.area_acres) || 0), 0);
+                            
+                            setFormData(prev => ({
+                              ...prev,
+                              plot_ids: newSelected,
+                              area_acres: totalAcres > 0 ? (Math.round(totalAcres * 100) / 100).toString() : prev.area_acres
+                            }));
+                          }}
+                        />
+                        <span className={`text-sm select-none flex-1 flex justify-between items-center ${isSelected ? 'text-primary font-bold' : 'text-text-secondary font-medium'}`}>
+                          {p.name}
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-primary/10 text-primary' : 'bg-border-light text-text-muted'}`}>
+                            {p.area_acres} ac
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
             </div>
             <div className="flex flex-col gap-1">
               <label className="agri-label">Sowing Date</label>
