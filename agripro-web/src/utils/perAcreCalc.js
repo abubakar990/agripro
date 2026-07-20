@@ -100,7 +100,7 @@ export const getPlotScore = (plotId, { expenses = [], revenue = [], cropCycles =
   const area = parseFloat(plot.area_acres);
   const plotExpenses = expenses.filter(e => e.plot_id === plotId);
   const plotRevenue = revenue.filter(r => r.plot_id === plotId);
-  const plotCycles = cropCycles.filter(c => c.plot_id === plotId);
+  const plotCycles = cropCycles.filter(c => c.plot_ids?.includes(plotId) || c.plot_id === plotId);
   
   if (plotExpenses.length === 0 && plotRevenue.length === 0) return null;
   

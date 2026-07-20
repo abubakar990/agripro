@@ -1340,7 +1340,7 @@ const FarmMap = () => {
                   color = getScoreColor(score);
                   fillOpacity = selectedPlot?.id === plot.id ? 0.7 : 0.4;
                 } else if (mapOverlay === 'crop') {
-                  const activeCycle = cropCycles.find(c => c.plot_id === plot.id && c.status !== 'Harvested' && c.status !== 'Failed');
+                  const activeCycle = cropCycles.find(c => (c.plot_ids?.includes(plot.id) || c.plot_id === plot.id) && c.status !== 'Harvested' && c.status !== 'Failed');
                   if (activeCycle) {
                     // Generate a color based on crop name hash
                     const hash = activeCycle.crop_name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -1544,7 +1544,7 @@ const FarmMap = () => {
                 </div>
               ) : (
                   plots.map(plot => {
-                    const activeCycle = cropCycles.find(c => c.plot_id === plot.id && c.status !== 'Harvested' && c.status !== 'Failed');
+                    const activeCycle = cropCycles.find(c => (c.plot_ids?.includes(plot.id) || c.plot_id === plot.id) && c.status !== 'Harvested' && c.status !== 'Failed');
                     const score = getPlotScore(plot.id, { expenses, revenue, cropCycles, farmPlots: plots, farms });
                     const isSelected = selectedPlot?.id === plot.id;
                     const isAdjustingThis = adjustingPlotId === plot.id;
