@@ -12,7 +12,7 @@ import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconGridDots, IconCut, IconVectorTriangle, IconList, IconArrowBackUp, IconArrowForwardUp } from '@tabler/icons-react';
 import { useFarms, useFarmPlots, useCropCycles, useExpenses, useRevenue, useAcrePresets } from '../../hooks/queries';
-import { useFilteredData } from '../../hooks/useFilteredData';
+
 const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, onPlotRedrawn, onPlotCut, mapRef }) => {
   const map = useMap();
   
@@ -180,9 +180,8 @@ const FarmMap = () => {
   const numericFarmId = parseInt(farmId);
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
 
-  const { data: farms = [] } = useFarms(currentOrgId);
-  const { data: rawFarmPlots = [], refetch } = useFarmPlots([numericFarmId]);
-  const farmPlots = useFilteredData(rawFarmPlots);
+  const { data: farms = [], refetch: refetchFarms } = useFarms(currentOrgId);
+  const { data: farmPlots = [], refetch } = useFarmPlots([numericFarmId]);
   const { data: cropCycles = [] } = useCropCycles([numericFarmId]);
   const { data: expenses = [] } = useExpenses([numericFarmId]);
   const { data: revenue = [] } = useRevenue([numericFarmId]);
@@ -496,6 +495,7 @@ const FarmMap = () => {
       
       alert('Farm boundary saved!');
       if (refetch) refetch();
+      if (refetchFarms) refetchFarms();
     } catch (err) {
       alert('Error saving farm boundary: ' + err.message);
     }
@@ -545,6 +545,7 @@ const FarmMap = () => {
       setAdjustingFarmBoundary(false);
       alert('Farm boundary adjustments saved and plots adjusted!');
       if (refetch) refetch();
+      if (refetchFarms) refetchFarms();
     } catch (err) {
       alert('Error saving boundary: ' + err.message);
     }
@@ -665,6 +666,7 @@ const FarmMap = () => {
       setAdjustingPlotId(null);
       alert('Plot adjustments saved!');
       if (refetch) refetch();
+      if (refetchFarms) refetchFarms();
     } catch (err) {
       alert('Error saving boundary: ' + err.message);
     }
