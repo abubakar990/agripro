@@ -1,15 +1,8 @@
 /**
  * Geospatial utilities for farm mapping
  */
-import * as turf from '@turf/helpers';
-import intersect from '@turf/intersect';
-import area from '@turf/area';
-import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
-import booleanIntersects from '@turf/boolean-intersects';
-import bbox from '@turf/bbox';
-import transformRotate from '@turf/transform-rotate';
-import union from '@turf/union';
-import truncate from '@turf/truncate';
+import * as turf from '@turf/turf';
+const { intersect, area, booleanPointInPolygon, booleanIntersects, bbox, transformRotate, union, truncate } = turf;
 
 /**
  * Calculate area in acres from an array of [lat, lng] coordinates
