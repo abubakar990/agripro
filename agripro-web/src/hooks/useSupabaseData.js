@@ -30,6 +30,9 @@ export function useSupabaseData(session, preferredOrgId) {
       let currentOrg = null;
       if (organizations && organizations.length > 0) {
         currentOrg = organizations.find(o => o.id === preferredOrgId) || organizations[0];
+        if (currentOrg.id !== preferredOrgId) {
+          localStorage.setItem('agripro_current_org_id', currentOrg.id);
+        }
       }
 
       if (!currentOrg) {
