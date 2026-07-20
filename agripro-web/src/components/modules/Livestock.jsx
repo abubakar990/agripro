@@ -10,7 +10,7 @@ const AnimalCard = ({ animal, farm, healthEvents = [], onRecordHealth, onEdit, r
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
-    if (!window.confirm(`Are you sure you want to delete ${animal.name || animal.tag}?`)) return;
+    if (!await confirmDialog(`Are you sure you want to delete ${animal.name || animal.tag}?`)) return;
     
     setIsDeleting(true);
     try {
@@ -138,6 +138,7 @@ const AnimalCard = ({ animal, farm, healthEvents = [], onRecordHealth, onEdit, r
 import { useLivestock, useAnimalHealth, useCategories, useFarms } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const Livestock = ({ user }) => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');

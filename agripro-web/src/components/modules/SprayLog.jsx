@@ -10,6 +10,7 @@ import { useSprayLog, useFarms, useFarmPlots, useCropCycles } from '../../hooks/
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const SprayLog = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -104,7 +105,7 @@ const SprayLog = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this log?')) return;
+    if (!await confirmDialog('Are you sure you want to delete this log?')) return;
     try {
       const { error } = await supabase.from('spray_log').delete().eq('id', id);
       if (error) throw error;

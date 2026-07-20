@@ -9,6 +9,7 @@ import { useRevenue, useFarms, useCategories, useFarmPlots, useCropCycles } from
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const Revenue = ({ user }) => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -186,7 +187,7 @@ const Revenue = ({ user }) => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this record?')) return;
+    if (!await confirmDialog('Are you sure you want to delete this record?')) return;
     
     try {
       const { error } = await supabase.from('revenue').delete().eq('id', id);

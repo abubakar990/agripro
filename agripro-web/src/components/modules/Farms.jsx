@@ -10,6 +10,7 @@ import { supabase } from '../../lib/supabase';
 import { useFarms, useFarmPlots } from '../../hooks/queries';
 import { useGlobalStore } from '../../store/globalStore';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const Farms = ({ currentOrg }) => {
   const currentOrgId = currentOrg?.id || localStorage.getItem('agripro_current_org_id');
@@ -119,7 +120,7 @@ const Farms = ({ currentOrg }) => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this farm? This may affect records linked to it.')) return;
+    if (!await confirmDialog('Are you sure you want to delete this farm? This may affect records linked to it.')) return;
     
     try {
       const { error } = await supabase.from('farms').delete().eq('id', id);

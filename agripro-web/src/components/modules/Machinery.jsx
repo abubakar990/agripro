@@ -100,6 +100,7 @@ const MachineCard = ({ machine, farm, usage, onLogUsage, onEdit, onDelete }) => 
 import { useMachinery, useMachineUsage, useCategories, useFarms } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const Machinery = ({ user }) => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -305,7 +306,7 @@ const Machinery = ({ user }) => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this machine? All its usage logs will also be affected.')) return;
+    if (!await confirmDialog('Are you sure you want to delete this machine? All its usage logs will also be affected.')) return;
     
     try {
       const { error } = await supabase.from('machinery').delete().eq('id', id);

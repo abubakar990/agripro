@@ -15,7 +15,7 @@ const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory, refetch }) =>
   const isOverdue = new Date(entry.due_date) < new Date() && remaining > 0;
 
   const handleDelete = async () => {
-    if (!window.confirm(`Are you sure you want to delete credit entry for ${entry.party}?`)) return;
+    if (!await confirmDialog(`Are you sure you want to delete credit entry for ${entry.party}?`)) return;
     
     setIsDeleting(true);
     try {
@@ -129,6 +129,7 @@ const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory, refetch }) =>
 import { useCreditEntries, useFarms } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const CreditLedger = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');

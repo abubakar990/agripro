@@ -7,6 +7,7 @@ import FarmFilterBar from './components/layout/FarmFilterBar';
 import LandingPage from './components/landing/LandingPage';
 import Auth from './components/modules/Auth';
 import ToastContainer from './components/shared/ToastContainer';
+import ConfirmContainer from './components/shared/ConfirmContainer';
 import { useFarmFilter } from './hooks/useFarmFilter';
 import { useDateFilter } from './hooks/useDateFilter';
 import { useSupabaseData } from './hooks/useSupabaseData';
@@ -150,6 +151,7 @@ function App() {
   return (
     <ErrorBoundary>
       <ToastContainer />
+      <ConfirmContainer />
       <Router>
         <div className="flex min-h-screen bg-bg relative">
           {isMobileSidebarOpen && (

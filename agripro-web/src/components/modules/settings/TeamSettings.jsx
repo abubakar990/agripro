@@ -17,6 +17,7 @@ import Badge from '../../shared/Badge';
 import Modal from '../../shared/Modal';
 import { supabase } from '../../../lib/supabase';
 import { toast } from '../../../utils/toast';
+import { confirmDialog } from '../../../utils/confirmDialog';
 
 const TeamSettings = ({ currentOrg, user, farms = [] }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -149,7 +150,7 @@ const TeamSettings = ({ currentOrg, user, farms = [] }) => {
   };
 
   const removeMember = async (memberId, memberUserId) => {
-    if (!window.confirm('Are you sure you want to remove this member?')) return;
+    if (!await confirmDialog('Are you sure you want to remove this member?')) return;
     
     try {
       const { error } = await supabase
@@ -164,7 +165,7 @@ const TeamSettings = ({ currentOrg, user, farms = [] }) => {
   };
 
   const cancelInvite = async (inviteId, inviteEmail) => {
-    if (!window.confirm('Cancel this invitation?')) return;
+    if (!await confirmDialog('Cancel this invitation?')) return;
     
     try {
       const { error } = await supabase

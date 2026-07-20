@@ -10,6 +10,7 @@ import { useIrrigationLog, useFarms, useFarmPlots, useCropCycles } from '../../h
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const Irrigation = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -99,7 +100,7 @@ const Irrigation = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this log?')) return;
+    if (!await confirmDialog('Are you sure you want to delete this log?')) return;
     try {
       const { error } = await supabase.from('irrigation_log').delete().eq('id', id);
       if (error) throw error;

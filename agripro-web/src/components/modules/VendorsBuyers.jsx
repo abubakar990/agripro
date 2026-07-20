@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 
 import { useVendorsBuyers } from '../../hooks/queries';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const VendorsBuyers = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -63,7 +64,7 @@ const VendorsBuyers = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this contact?')) return;
+    if (!await confirmDialog('Are you sure you want to delete this contact?')) return;
     try {
       const { error } = await supabase.from('vendors_buyers').delete().eq('id', id);
       if (error) throw error;

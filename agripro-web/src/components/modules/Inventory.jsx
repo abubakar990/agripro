@@ -9,6 +9,7 @@ import Modal from '../shared/Modal';
 import { useInventory, useCategories, useFarms } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const Inventory = ({ user }) => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -151,7 +152,7 @@ const Inventory = ({ user }) => {
   };
 
   const handleDelete = async (item) => {
-    if (!window.confirm(`Are you sure you want to delete ${item.item}?`)) return;
+    if (!await confirmDialog(`Are you sure you want to delete ${item.item}?`)) return;
     
     setIsDeleting(item.id);
     try {

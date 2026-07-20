@@ -13,6 +13,7 @@ import Badge from '../shared/Badge';
 import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconGridDots, IconCut, IconVectorTriangle, IconList, IconArrowBackUp, IconArrowForwardUp } from '@tabler/icons-react';
 import { useFarms, useFarmPlots, useCropCycles, useExpenses, useRevenue, useAcrePresets } from '../../hooks/queries';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, onPlotRedrawn, onPlotCut, mapRef }) => {
   const map = useMap();
@@ -471,7 +472,7 @@ const FarmMap = () => {
       // Auto-generate plots if a preset is selected
       if (selectedPresetId) {
         const preset = acrePresets.find(p => p.id === parseInt(selectedPresetId));
-        if (preset && window.confirm(`Would you like to automatically fill this new boundary with ${preset.name} (${preset.length_ft}' x ${preset.width_ft}') plots?`)) {
+        if (preset && await confirmDialog(`Would you like to automatically fill this new boundary with ${preset.name} (${preset.length_ft}' x ${preset.width_ft}') plots?`)) {
            const generatedPlots = autoGeneratePlotsForBoundary(geojson, parseFloat(preset.length_ft), parseFloat(preset.width_ft));
            
            if (generatedPlots.length > 0) {
@@ -553,7 +554,7 @@ const FarmMap = () => {
   };
 
   const handleDeleteSpecificBoundary = async (indexToDelete) => {
-    if (!window.confirm("Are you sure you want to delete this specific boundary area?")) return;
+    if (!await confirmDialog("Are you sure you want to delete this specific boundary area?")) return;
     try {
       let newBoundary = null;
       let newArea = 0;
@@ -826,7 +827,7 @@ const FarmMap = () => {
 
   const handleSaveGrid = async () => {
     if (plots.length > 0) {
-      const confirmOverwrite = window.confirm("This will erase all current plots and auto-fill the entire farm boundary. Proceed?");
+      const confirmOverwrite = await confirmDialog("This will erase all current plots and auto-fill the entire farm boundary. Proceed?");
       if (!confirmOverwrite) return;
     }
     
@@ -873,7 +874,7 @@ const FarmMap = () => {
   };
 
   const handleDeletePlot = async (plotId) => {
-    if (!window.confirm("Are you sure you want to completely delete this plot?")) return;
+    if (!await confirmDialog("Are you sure you want to completely delete this plot?")) return;
     try {
       const plotToDelete = plots.find(p => p.id === plotId);
       const { error } = await supabase.from('farm_plots').delete().eq('id', plotId);
@@ -900,7 +901,7 @@ const FarmMap = () => {
 
   const handleBulkDelete = async () => {
      if (bulkSelectedIds.length === 0) return;
-     if (!window.confirm(`Are you sure you want to delete ${bulkSelectedIds.length} plots?`)) return;
+     if (!await confirmDialog(`Are you sure you want to delete ${bulkSelectedIds.length} plots?`)) return;
      try {
        const plotsToDelete = plots.filter(p => bulkSelectedIds.includes(p.id));
        await supabase.from('farm_plots').delete().in('id', bulkSelectedIds);

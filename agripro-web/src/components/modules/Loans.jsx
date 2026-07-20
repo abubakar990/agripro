@@ -14,7 +14,7 @@ const LoanCard = ({ loan, farm, onRecordRepayment, refetch }) => {
   const isOverdue = loan.due_date && new Date(loan.due_date) < new Date() && remaining > 0;
 
   const handleDelete = async () => {
-    if (!window.confirm(`Are you sure you want to delete loan entry for ${loan.party}?`)) return;
+    if (!await confirmDialog(`Are you sure you want to delete loan entry for ${loan.party}?`)) return;
     
     setIsDeleting(true);
     try {
@@ -125,6 +125,7 @@ const LoanCard = ({ loan, farm, onRecordRepayment, refetch }) => {
 import { useLoans, useFarms } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const Loans = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');

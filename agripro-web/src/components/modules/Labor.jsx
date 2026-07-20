@@ -9,6 +9,7 @@ import Modal from '../shared/Modal';
 import { useWorkers, useAttendance, useFarms } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const Labor = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -157,7 +158,7 @@ const Labor = () => {
   };
 
   const handleDelete = async (worker) => {
-    if (!window.confirm(`Are you sure you want to delete ${worker.name}?`)) return;
+    if (!await confirmDialog(`Are you sure you want to delete ${worker.name}?`)) return;
 
     setIsDeleting(worker.id);
     try {

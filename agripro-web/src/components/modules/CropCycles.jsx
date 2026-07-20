@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { useCropCycles, useFarms, useFarmPlots } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const CropCycles = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -171,7 +172,7 @@ const CropCycles = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this crop cycle?')) return;
+    if (!await confirmDialog('Are you sure you want to delete this crop cycle?')) return;
     try {
       const { error } = await supabase.from('crop_cycles').delete().eq('id', id);
       if (error) throw error;

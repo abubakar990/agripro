@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 
 import { useMandiPrices } from '../../hooks/queries';
 import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const MandiPrices = () => {
   const { data: rawMandiPrices = [], isLoading, refetch } = useMandiPrices();
@@ -56,7 +57,7 @@ const MandiPrices = () => {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this price record?')) return;
+    if (!await confirmDialog('Are you sure you want to delete this price record?')) return;
     try {
       const { error } = await supabase.from('mandi_prices').delete().eq('id', id);
       if (error) throw error;
