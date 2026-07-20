@@ -7,6 +7,7 @@ import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
 import { useMandiPrices } from '../../hooks/queries';
+import { toast } from '../../utils/toast';
 
 const MandiPrices = () => {
   const { data: rawMandiPrices = [], isLoading, refetch } = useMandiPrices();
@@ -48,7 +49,7 @@ const MandiPrices = () => {
       });
     } catch (error) {
       console.error('Error adding mandi price:', error);
-      alert('Error adding mandi price: ' + error.message);
+      toast.error('Error adding mandi price: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -62,7 +63,7 @@ const MandiPrices = () => {
       await refetch();
     } catch (error) {
       console.error('Error deleting mandi price:', error);
-      alert('Error deleting mandi price: ' + error.message);
+      toast.error('Error deleting mandi price: ' + error.message);
     }
   };
 

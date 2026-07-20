@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 
 import { useCropCycles, useFarms, useFarmPlots } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
+import { toast } from '../../utils/toast';
 
 const CropCycles = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -140,7 +141,7 @@ const CropCycles = () => {
       });
     } catch (error) {
       console.error('Error saving crop cycle:', error);
-      alert('Error saving crop cycle: ' + error.message);
+      toast.error('Error saving crop cycle: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -177,7 +178,7 @@ const CropCycles = () => {
       await refetch();
     } catch (error) {
       console.error('Error deleting crop cycle:', error);
-      alert('Error deleting crop cycle: ' + error.message);
+      toast.error('Error deleting crop cycle: ' + error.message);
     }
   };
 

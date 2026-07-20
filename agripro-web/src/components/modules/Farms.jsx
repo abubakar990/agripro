@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 
 import { useFarms, useFarmPlots } from '../../hooks/queries';
 import { useGlobalStore } from '../../store/globalStore';
+import { toast } from '../../utils/toast';
 
 const Farms = ({ currentOrg }) => {
   const currentOrgId = currentOrg?.id || localStorage.getItem('agripro_current_org_id');
@@ -111,7 +112,7 @@ const Farms = ({ currentOrg }) => {
       });
     } catch (error) {
       console.error('Error saving farm:', error);
-      alert('Error saving farm: ' + error.message);
+      toast.error('Error saving farm: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -126,14 +127,14 @@ const Farms = ({ currentOrg }) => {
       await refetch();
     } catch (error) {
       console.error('Error deleting farm:', error);
-      alert('Error deleting farm: ' + error.message);
+      toast.error('Error deleting farm: ' + error.message);
     }
   };
 
   const openAddModal = () => {
     // SaaS Limit: Free tier can only manage 1 farm
     if (currentOrg?.subscription_tier !== 'pro' && farms.length >= 1) {
-      alert('Your organization is on the Free Tier which is limited to 1 farm. Please upgrade to the Pro Plan to manage unlimited farms!');
+      toast.info('Your organization is on the Free Tier which is limited to 1 farm. Please upgrade to the Pro Plan to manage unlimited farms!');
       window.location.hash = '/billing'; // Or use navigate if available, but hash works with some routers
       return;
     }

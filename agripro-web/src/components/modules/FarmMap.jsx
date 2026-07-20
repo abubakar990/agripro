@@ -12,6 +12,7 @@ import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconGridDots, IconCut, IconVectorTriangle, IconList, IconArrowBackUp, IconArrowForwardUp } from '@tabler/icons-react';
 import { useFarms, useFarmPlots, useCropCycles, useExpenses, useRevenue, useAcrePresets } from '../../hooks/queries';
+import { toast } from '../../utils/toast';
 
 const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, onPlotRedrawn, onPlotCut, mapRef }) => {
   const map = useMap();
@@ -239,7 +240,7 @@ const FarmMap = () => {
       setRedoStack(prev => [...prev, action]);
       if (refetch) refetch();
     } catch (err) {
-      alert("Undo failed: " + err.message);
+      toast.error("Undo failed: " + err.message);
     }
   }, [isDrawMode, undoStack, refetch]);
 
@@ -253,7 +254,7 @@ const FarmMap = () => {
       setUndoStack(prev => [...prev, action]);
       if (refetch) refetch();
     } catch (err) {
-      alert("Redo failed: " + err.message);
+      toast.error("Redo failed: " + err.message);
     }
   }, [isDrawMode, redoStack, refetch]);
   const cancelDraw = useCallback(() => {
@@ -445,7 +446,7 @@ const FarmMap = () => {
 
   const startAcreBoxTool = () => {
     if (!selectedPresetId) {
-      alert('Please select or create an Acre Preset first.');
+      toast.error('Please select or create an Acre Preset first.');
       return;
     }
     setIsDrawMode('acre_box');
@@ -485,19 +486,19 @@ const FarmMap = () => {
              }));
              const { error: insertErr } = await supabase.from('farm_plots').insert(insertData);
              if (insertErr) throw insertErr;
-             alert(`Farm boundary added and ${generatedPlots.length} plots auto-generated!`);
+             toast.success(`Farm boundary added and ${generatedPlots.length} plots auto-generated!`);
              return;
            } else {
-             alert('Farm boundary added, but the area was too small or irregular to generate grid plots.');
+             toast.success('Farm boundary added, but the area was too small or irregular to generate grid plots.');
            }
         }
       }
       
-      alert('Farm boundary saved!');
+      toast.success('Farm boundary saved!');
       if (refetch) refetch();
       if (refetchFarms) refetchFarms();
     } catch (err) {
-      alert('Error saving farm boundary: ' + err.message);
+      toast.error('Error saving farm boundary: ' + err.message);
     }
   }, [numericFarmId, farm, selectedPresetId, acrePresets, plots]);
 
@@ -543,11 +544,11 @@ const FarmMap = () => {
       }
       
       setAdjustingFarmBoundary(false);
-      alert('Farm boundary adjustments saved and plots adjusted!');
+      toast.success('Farm boundary adjustments saved and plots adjusted!');
       if (refetch) refetch();
       if (refetchFarms) refetchFarms();
     } catch (err) {
-      alert('Error saving boundary: ' + err.message);
+      toast.error('Error saving boundary: ' + err.message);
     }
   };
 
@@ -590,10 +591,10 @@ const FarmMap = () => {
         }
       }
       
-      alert('Boundary area deleted and plots adjusted.');
+      toast.success('Boundary area deleted and plots adjusted.');
       if (refetch) refetch();
     } catch (err) {
-      alert('Error deleting boundary: ' + err.message);
+      toast.error('Error deleting boundary: ' + err.message);
     }
   };
 
@@ -629,10 +630,10 @@ const FarmMap = () => {
       });
       
       setRedrawPlotId(null);
-      alert('Plot boundary updated!');
+      toast.info('Plot boundary updated!');
       if (refetch) refetch();
     } catch (err) {
-      alert('Error updating boundary: ' + err.message);
+      toast.error('Error updating boundary: ' + err.message);
     }
   }, [redrawPlotId, plots, pushAction, refetch]);
 
@@ -664,11 +665,11 @@ const FarmMap = () => {
       });
       
       setAdjustingPlotId(null);
-      alert('Plot adjustments saved!');
+      toast.success('Plot adjustments saved!');
       if (refetch) refetch();
       if (refetchFarms) refetchFarms();
     } catch (err) {
-      alert('Error saving boundary: ' + err.message);
+      toast.error('Error saving boundary: ' + err.message);
     }
   };
 
@@ -692,7 +693,7 @@ const FarmMap = () => {
       
       if (refetch) refetch();
     } catch (err) {
-      alert('Error rotating plot: ' + err.message);
+      toast.error('Error rotating plot: ' + err.message);
     }
   };
 
@@ -726,7 +727,7 @@ const FarmMap = () => {
       });
       
       if (!cutPlot) {
-         alert("Could not identify the plot that was cut.");
+         toast.info("Could not identify the plot that was cut.");
          return;
       }
       
@@ -763,7 +764,7 @@ const FarmMap = () => {
          if (refetch) refetch();
       }
     } catch(err) {
-      alert("Error splitting plot: " + err.message);
+      toast.error("Error splitting plot: " + err.message);
     }
   }, [plots, numericFarmId, refetch]);
 
@@ -810,7 +811,7 @@ const FarmMap = () => {
        setSelectedPlotIdsForMerge([]);
        setIsDrawMode(null);
     } catch (e) {
-       alert("Error merging plots: " + e.message);
+       toast.error("Error merging plots: " + e.message);
     }
   };
 
@@ -831,7 +832,7 @@ const FarmMap = () => {
     
     try {
       if (gridPreviewPlots.length === 0) {
-         alert('No plots generated in preview.');
+         toast.success('No plots generated in preview.');
          return;
       }
       
@@ -862,12 +863,12 @@ const FarmMap = () => {
       });
       
       if (refetch) refetch();
-      alert(`Successfully generated ${plotsToInsert.length} plots! The map will now refresh.`);
+      toast.success(`Successfully generated ${plotsToInsert.length} plots! The map will now refresh.`);
       setTimeout(() => {
         setIsDrawMode(null);
       }, 1500);
     } catch (err) {
-      alert("Error saving grid: " + err.message);
+      toast.error("Error saving grid: " + err.message);
     }
   };
 
@@ -893,7 +894,7 @@ const FarmMap = () => {
       if (refetch) refetch();
       if (selectedPlot?.id === plotId) setSelectedPlot(null);
     } catch (err) {
-      alert('Error deleting plot: ' + err.message);
+      toast.error('Error deleting plot: ' + err.message);
     }
   };
 
@@ -917,7 +918,7 @@ const FarmMap = () => {
        if (refetch) refetch();
        setBulkSelectedIds([]);
      } catch (err) {
-       alert("Error deleting plots: " + err.message);
+       toast.error("Error deleting plots: " + err.message);
      }
   };
 
@@ -928,7 +929,7 @@ const FarmMap = () => {
     const result = createIntersectedAcreBox(latlng, parseFloat(preset.length_ft), parseFloat(preset.width_ft), farm.boundary);
     
     if (result.error) {
-      alert(result.error);
+      toast.error(result.error);
       return;
     }
 
@@ -965,10 +966,10 @@ const FarmMap = () => {
       setPlotFormData({ name: '', soil_type: 'Loamy', soil_quality: 'Good', drainage: 'Good', water_source: '', notes: '' });
       setPendingPlotGeoJSON(null);
       setPendingPlotAcres(0);
-      alert('Plot created successfully!');
+      toast.success('Plot created successfully!');
       if (refetch) refetch();
     } catch (err) {
-      alert('Error saving plot: ' + err.message);
+      toast.error('Error saving plot: ' + err.message);
     }
   };
 
@@ -986,9 +987,9 @@ const FarmMap = () => {
       
       setIsAcreModalOpen(false);
       setCustomPreset({ name: '', length_ft: '', width_ft: '' });
-      alert('Preset saved! It will be available shortly.');
+      toast.success('Preset saved! It will be available shortly.');
     } catch (err) {
-      alert('Error saving preset: ' + err.message);
+      toast.error('Error saving preset: ' + err.message);
     }
   };
 

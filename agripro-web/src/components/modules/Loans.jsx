@@ -27,7 +27,7 @@ const LoanCard = ({ loan, farm, onRecordRepayment, refetch }) => {
       await refetch();
     } catch (error) {
       console.error('Error deleting loan entry:', error.message);
-      alert('Error deleting entry: ' + error.message);
+      toast.error('Error deleting entry: ' + error.message);
     } finally {
       setIsDeleting(false);
     }
@@ -124,6 +124,7 @@ const LoanCard = ({ loan, farm, onRecordRepayment, refetch }) => {
 
 import { useLoans, useFarms } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
+import { toast } from '../../utils/toast';
 
 const Loans = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -210,7 +211,7 @@ const Loans = () => {
       });
     } catch (error) {
       console.error('Error adding loan:', error.message);
-      alert('Error adding loan: ' + error.message);
+      toast.error('Error adding loan: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -259,7 +260,7 @@ const Loans = () => {
       setSelectedLoan(null);
     } catch (error) {
       console.error('Error recording repayment:', error.message);
-      alert('Error recording repayment: ' + error.message);
+      toast.error('Error recording repayment: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }

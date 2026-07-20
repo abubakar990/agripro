@@ -3,6 +3,7 @@ import { IconCreditCard, IconCircleCheck, IconLock, IconLoader2, IconExternalLin
 import Button from '../../shared/Button';
 import Badge from '../../shared/Badge';
 import { supabase } from '../../../lib/supabase';
+import { toast } from '../../../utils/toast';
 
 const Billing = ({ currentOrg }) => {
   const [loading, setLoading] = useState(false);
@@ -52,7 +53,7 @@ const Billing = ({ currentOrg }) => {
       }
     } catch (error) {
       console.error('Stripe Error:', error);
-      alert('Could not initiate checkout. Please try again later.');
+      toast.info('Could not initiate checkout. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -71,7 +72,7 @@ const Billing = ({ currentOrg }) => {
       }
     } catch (error) {
       console.error('Portal Error:', error);
-      alert('Could not open billing portal.');
+      toast.info('Could not open billing portal.');
     } finally {
       setLoading(false);
     }

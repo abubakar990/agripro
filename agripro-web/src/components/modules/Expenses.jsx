@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { useExpenses, useFarms, useCategories, useFarmPlots, useCropCycles } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
+import { toast } from '../../utils/toast';
 
 const Expenses = ({ user }) => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -178,7 +179,7 @@ const Expenses = ({ user }) => {
       });
     } catch (error) {
       console.error('Error saving expense:', error);
-      alert('Error saving expense: ' + error.message);
+      toast.error('Error saving expense: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -193,7 +194,7 @@ const Expenses = ({ user }) => {
       await refetch();
     } catch (error) {
       console.error('Error deleting expense:', error);
-      alert('Error deleting expense: ' + error.message);
+      toast.error('Error deleting expense: ' + error.message);
     }
   };
 

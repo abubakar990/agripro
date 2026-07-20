@@ -99,6 +99,7 @@ const MachineCard = ({ machine, farm, usage, onLogUsage, onEdit, onDelete }) => 
 
 import { useMachinery, useMachineUsage, useCategories, useFarms } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
+import { toast } from '../../utils/toast';
 
 const Machinery = ({ user }) => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -244,7 +245,7 @@ const Machinery = ({ user }) => {
       });
     } catch (error) {
       console.error('Error saving machinery:', error);
-      alert('Error saving machinery: ' + error.message);
+      toast.error('Error saving machinery: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -276,7 +277,7 @@ const Machinery = ({ user }) => {
       });
     } catch (error) {
       console.error('Error logging usage:', error);
-      alert('Error logging usage: ' + error.message);
+      toast.error('Error logging usage: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -312,7 +313,7 @@ const Machinery = ({ user }) => {
       await refetchMachinery();
     } catch (error) {
       console.error('Error deleting machinery:', error);
-      alert('Error deleting machinery: ' + error.message);
+      toast.error('Error deleting machinery: ' + error.message);
     }
   };
 

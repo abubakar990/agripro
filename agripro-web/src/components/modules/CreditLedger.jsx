@@ -28,7 +28,7 @@ const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory, refetch }) =>
       await refetch();
     } catch (error) {
       console.error('Error deleting credit entry:', error.message);
-      alert('Error deleting entry: ' + error.message);
+      toast.error('Error deleting entry: ' + error.message);
     } finally {
       setIsDeleting(false);
     }
@@ -128,6 +128,7 @@ const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory, refetch }) =>
 
 import { useCreditEntries, useFarms } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
+import { toast } from '../../utils/toast';
 
 const CreditLedger = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -208,7 +209,7 @@ const CreditLedger = () => {
       });
     } catch (error) {
       console.error('Error adding credit entry:', error.message);
-      alert('Error adding entry: ' + error.message);
+      toast.error('Error adding entry: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -245,7 +246,7 @@ const CreditLedger = () => {
       setSelectedEntry(null);
     } catch (error) {
       console.error('Error recording payment:', error.message);
-      alert('Error recording payment: ' + error.message);
+      toast.error('Error recording payment: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }

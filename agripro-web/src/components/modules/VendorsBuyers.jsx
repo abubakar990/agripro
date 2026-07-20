@@ -7,6 +7,7 @@ import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
 import { useVendorsBuyers } from '../../hooks/queries';
+import { toast } from '../../utils/toast';
 
 const VendorsBuyers = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -55,7 +56,7 @@ const VendorsBuyers = () => {
       });
     } catch (error) {
       console.error('Error adding vendor/buyer:', error);
-      alert('Error adding vendor/buyer: ' + error.message);
+      toast.error('Error adding vendor/buyer: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -69,7 +70,7 @@ const VendorsBuyers = () => {
       await refetch();
     } catch (error) {
       console.error('Error deleting contact:', error);
-      alert('Error deleting contact: ' + error.message);
+      toast.error('Error deleting contact: ' + error.message);
     }
   };
 

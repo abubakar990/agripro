@@ -3,6 +3,7 @@ import { IconShieldLock, IconUsers, IconBuildingCommunity, IconCircleCheck, Icon
 import Button from '../../shared/Button';
 import Badge from '../../shared/Badge';
 import { supabase } from '../../../lib/supabase';
+import { toast } from '../../../utils/toast';
 
 const AdminPanel = () => {
   const [organizations, setOrganizations] = useState([]);
@@ -72,7 +73,7 @@ const AdminPanel = () => {
         } : org
       ));
     } catch (error) {
-      alert('Error updating plan: ' + error.message);
+      toast.error('Error updating plan: ' + error.message);
     } finally {
       setUpdatingId(null);
     }

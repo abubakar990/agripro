@@ -23,7 +23,7 @@ const AnimalCard = ({ animal, farm, healthEvents = [], onRecordHealth, onEdit, r
       await refetch();
     } catch (error) {
       console.error('Error deleting animal:', error.message);
-      alert('Error deleting animal: ' + error.message);
+      toast.error('Error deleting animal: ' + error.message);
     } finally {
       setIsDeleting(false);
     }
@@ -137,6 +137,7 @@ const AnimalCard = ({ animal, farm, healthEvents = [], onRecordHealth, onEdit, r
 
 import { useLivestock, useAnimalHealth, useCategories, useFarms } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
+import { toast } from '../../utils/toast';
 
 const Livestock = ({ user }) => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -278,7 +279,7 @@ const Livestock = ({ user }) => {
       });
     } catch (error) {
       console.error('Error saving animal:', error.message);
-      alert('Error saving animal: ' + error.message);
+      toast.error('Error saving animal: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -339,7 +340,7 @@ const Livestock = ({ user }) => {
       setSelectedAnimal(null);
     } catch (error) {
       console.error('Error recording health event:', error.message);
-      alert('Error recording health event: ' + error.message);
+      toast.error('Error recording health event: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }

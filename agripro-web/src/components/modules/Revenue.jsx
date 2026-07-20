@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { useRevenue, useFarms, useCategories, useFarmPlots, useCropCycles } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
+import { toast } from '../../utils/toast';
 
 const Revenue = ({ user }) => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -178,7 +179,7 @@ const Revenue = ({ user }) => {
       });
     } catch (error) {
       console.error('Error saving revenue:', error);
-      alert('Error saving revenue: ' + error.message);
+      toast.error('Error saving revenue: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -193,7 +194,7 @@ const Revenue = ({ user }) => {
       await refetch(); // Force UI update
     } catch (error) {
       console.error('Error deleting revenue:', error);
-      alert('Error deleting revenue: ' + error.message);
+      toast.error('Error deleting revenue: ' + error.message);
     }
   };
 

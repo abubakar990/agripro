@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { IconPlant, IconMail, IconLock, IconLoader2, IconUser } from '@tabler/icons-react';
 import Button from '../shared/Button';
+import { toast } from '../../utils/toast';
 
 const Auth = () => {
   const [loading, setLoading] = useState(false);
@@ -28,7 +29,7 @@ const Auth = () => {
           }
         });
         if (error) throw error;
-        alert('Check your email for the confirmation link!');
+        toast.info('Check your email for the confirmation link!');
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;

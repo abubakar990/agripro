@@ -8,6 +8,7 @@ import Modal from '../shared/Modal';
 
 import { useWorkers, useAttendance, useFarms } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
+import { toast } from '../../utils/toast';
 
 const Labor = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -52,7 +53,7 @@ const Labor = () => {
       await refetchAttendance();
     } catch (error) {
       console.error('Error saving attendance:', error.message);
-      alert('Error saving attendance: ' + error.message);
+      toast.error('Error saving attendance: ' + error.message);
     }
   };
 
@@ -136,7 +137,7 @@ const Labor = () => {
       });
     } catch (error) {
       console.error('Error saving worker:', error.message);
-      alert('Error saving worker: ' + error.message);
+      toast.error('Error saving worker: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -165,7 +166,7 @@ const Labor = () => {
       await refetchWorkers();
     } catch (error) {
       console.error('Error deleting worker:', error.message);
-      alert('Error deleting worker: ' + error.message);
+      toast.error('Error deleting worker: ' + error.message);
     } finally {
       setIsDeleting(null);
     }

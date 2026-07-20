@@ -8,6 +8,7 @@ import Modal from '../shared/Modal';
 
 import { useInventory, useCategories, useFarms } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
+import { toast } from '../../utils/toast';
 
 const Inventory = ({ user }) => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -128,7 +129,7 @@ const Inventory = ({ user }) => {
       });
     } catch (error) {
       console.error('Error saving inventory item:', error.message);
-      alert('Error saving item: ' + error.message);
+      toast.error('Error saving item: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -159,7 +160,7 @@ const Inventory = ({ user }) => {
       await refetch();
     } catch (error) {
       console.error('Error deleting inventory item:', error.message);
-      alert('Error deleting item: ' + error.message);
+      toast.error('Error deleting item: ' + error.message);
     } finally {
       setIsDeleting(null);
     }

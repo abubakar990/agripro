@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { useIrrigationLog, useFarms, useFarmPlots, useCropCycles } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
+import { toast } from '../../utils/toast';
 
 const Irrigation = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -91,7 +92,7 @@ const Irrigation = () => {
       });
     } catch (error) {
       console.error('Error adding irrigation log:', error);
-      alert('Error adding irrigation log: ' + error.message);
+      toast.error('Error adding irrigation log: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -105,7 +106,7 @@ const Irrigation = () => {
       await refetch();
     } catch (error) {
       console.error('Error deleting irrigation log:', error);
-      alert('Error deleting irrigation log: ' + error.message);
+      toast.error('Error deleting irrigation log: ' + error.message);
     }
   };
 

@@ -9,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 import { useSprayLog, useFarms, useFarmPlots, useCropCycles } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
 import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
+import { toast } from '../../utils/toast';
 
 const SprayLog = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
@@ -96,7 +97,7 @@ const SprayLog = () => {
       });
     } catch (error) {
       console.error('Error adding spray log:', error);
-      alert('Error adding spray log: ' + error.message);
+      toast.error('Error adding spray log: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -110,7 +111,7 @@ const SprayLog = () => {
       await refetch();
     } catch (error) {
       console.error('Error deleting spray log:', error);
-      alert('Error deleting spray log: ' + error.message);
+      toast.error('Error deleting spray log: ' + error.message);
     }
   };
 

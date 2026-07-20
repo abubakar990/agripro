@@ -16,6 +16,7 @@ import Button from '../../shared/Button';
 import Badge from '../../shared/Badge';
 import Modal from '../../shared/Modal';
 import { supabase } from '../../../lib/supabase';
+import { toast } from '../../../utils/toast';
 
 const TeamSettings = ({ currentOrg, user, farms = [] }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -158,7 +159,7 @@ const TeamSettings = ({ currentOrg, user, farms = [] }) => {
       
       if (error) throw error;
     } catch (error) {
-      alert('Error removing member: ' + error.message);
+      toast.error('Error removing member: ' + error.message);
     }
   };
 
@@ -174,7 +175,7 @@ const TeamSettings = ({ currentOrg, user, farms = [] }) => {
       if (error) throw error;
       setPendingInvites(prev => prev.filter(i => i.id !== inviteId));
     } catch (error) {
-      alert('Error canceling invite: ' + error.message);
+      toast.error('Error canceling invite: ' + error.message);
     }
   };
 
