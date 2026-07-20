@@ -69,6 +69,7 @@ const CropCycles = () => {
       act_yield_qty: cycle.act_yield_qty?.toString() || '',
       yield_unit: cycle.yield_unit || 'Maund'
     });
+    setPlotSearchTerm('');
     setIsModalOpen(true);
   };
 
@@ -80,6 +81,7 @@ const CropCycles = () => {
       harvest_date: new Date().toISOString().split('T')[0],
       revenue: cycle.revenue?.toString() || ''
     });
+    setPlotSearchTerm('');
     setIsModalOpen(true);
   };
 
@@ -169,6 +171,7 @@ const CropCycles = () => {
       act_yield_qty: '',
       yield_unit: 'Maund'
     });
+    setPlotSearchTerm('');
     setIsModalOpen(true);
   };
 
@@ -411,11 +414,26 @@ const CropCycles = () => {
                 <span>Select Plots</span>
                 {formData.plot_ids.length > 0 && <span className="text-xs text-primary font-bold">{formData.plot_ids.length} selected</span>}
               </label>
-              <div className="border border-border rounded-lg p-2 h-[100px] overflow-y-auto bg-white/50 flex flex-col gap-1 shadow-inner">
+              
+              <div className="relative mb-1">
+                <IconSearch size={14} className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-text-muted" />
+                <input 
+                  type="text" 
+                  placeholder="Search plots..." 
+                  value={plotSearchTerm}
+                  onChange={(e) => setPlotSearchTerm(e.target.value)}
+                  className="agri-input text-xs py-1.5 pl-8 w-full !min-h-0"
+                />
+              </div>
+
+              <div className="border border-border rounded-lg p-2 h-[130px] overflow-y-auto bg-white/50 flex flex-col gap-1 shadow-inner">
                 {farmPlots.filter(p => p.farm_id === parseInt(formData.farm_id)).length === 0 ? (
                   <span className="text-xs text-text-muted italic p-2 flex items-center justify-center h-full">No plots available for this farm</span>
                 ) : (
-                  farmPlots.filter(p => p.farm_id === parseInt(formData.farm_id)).map(p => {
+                  farmPlots
+                    .filter(p => p.farm_id === parseInt(formData.farm_id))
+                    .filter(p => p.name.toLowerCase().includes(plotSearchTerm.toLowerCase()))
+                    .map(p => {
                     const isSelected = formData.plot_ids.includes(p.id);
                     return (
                       <label key={p.id} className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors border ${isSelected ? 'bg-primary/5 border-primary/20' : 'hover:bg-bg-secondary border-transparent'}`}>
