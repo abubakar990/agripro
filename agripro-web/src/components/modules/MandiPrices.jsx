@@ -6,7 +6,11 @@ import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
-const MandiPrices = ({ mandiPrices = [] }) => {
+import { useMandiPrices } from '../../hooks/queries';
+
+const MandiPrices = () => {
+  const { data: rawMandiPrices = [], isLoading, refetch } = useMandiPrices();
+  const mandiPrices = rawMandiPrices;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -33,6 +37,7 @@ const MandiPrices = ({ mandiPrices = [] }) => {
       
       if (error) throw error;
       
+      await refetch();
       setIsModalOpen(false);
       setFormData({
         date: new Date().toISOString().split('T')[0],
@@ -54,6 +59,7 @@ const MandiPrices = ({ mandiPrices = [] }) => {
     try {
       const { error } = await supabase.from('mandi_prices').delete().eq('id', id);
       if (error) throw error;
+      await refetch();
     } catch (error) {
       console.error('Error deleting mandi price:', error);
       alert('Error deleting mandi price: ' + error.message);
@@ -69,6 +75,14 @@ const MandiPrices = ({ mandiPrices = [] }) => {
     });
     return Object.values(latest);
   }, [mandiPrices]);
+
+  if (isLoading) {
+    return (
+      <div className="flex w-full h-96 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

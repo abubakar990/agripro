@@ -6,7 +6,12 @@ import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
-const VendorsBuyers = ({ vendorsBuyers = [] }) => {
+import { useVendorsBuyers } from '../../hooks/queries';
+
+const VendorsBuyers = () => {
+  const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const { data: rawVendorsBuyers = [], isLoading, refetch } = useVendorsBuyers(currentOrgId);
+  const vendorsBuyers = rawVendorsBuyers;
   const [activeTab, setActiveTab] = useState('Vendor');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,6 +42,7 @@ const VendorsBuyers = ({ vendorsBuyers = [] }) => {
       
       if (error) throw error;
       
+      await refetch();
       setIsModalOpen(false);
       setFormData({
         type: activeTab,
@@ -60,6 +66,7 @@ const VendorsBuyers = ({ vendorsBuyers = [] }) => {
     try {
       const { error } = await supabase.from('vendors_buyers').delete().eq('id', id);
       if (error) throw error;
+      await refetch();
     } catch (error) {
       console.error('Error deleting contact:', error);
       alert('Error deleting contact: ' + error.message);
@@ -75,6 +82,14 @@ const VendorsBuyers = ({ vendorsBuyers = [] }) => {
       sum + (Number(item.total_business) - Number(item.total_settled)), 0);
     return { totalOutstanding };
   }, [filteredList]);
+
+  if (isLoading) {
+    return (
+      <div className="flex w-full h-96 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

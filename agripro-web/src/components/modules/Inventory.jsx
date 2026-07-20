@@ -6,7 +6,20 @@ import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 
-const Inventory = ({ inventory, farms, categories, user }) => {
+import { useInventory, useCategories, useFarms } from '../../hooks/queries';
+import { useFilteredData } from '../../hooks/useFilteredData';
+
+const Inventory = ({ user }) => {
+  const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const { data: farms = [] } = useFarms(currentOrgId);
+  const farmIds = farms.map(f => f.id);
+
+  const { data: rawInventory = [], isLoading, refetch } = useInventory(farmIds);
+  const inventory = useFilteredData(rawInventory);
+
+  const { data: allCategories = [] } = useCategories(currentOrgId);
+  const categories = allCategories.filter(c => c.module === 'inventory');
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(null);
@@ -100,6 +113,7 @@ const Inventory = ({ inventory, farms, categories, user }) => {
         if (error) throw error;
       }
 
+      await refetch();
       setIsModalOpen(false);
       setEditingId(null);
       setCustomCategory('');
@@ -140,12 +154,9 @@ const Inventory = ({ inventory, farms, categories, user }) => {
     
     setIsDeleting(item.id);
     try {
-      const { error } = await supabase
-        .from('inventory')
-        .delete()
-        .eq('id', item.id);
-      
+      const { error } = await supabase.from('inventory').delete().eq('id', item.id);
       if (error) throw error;
+      await refetch();
     } catch (error) {
       console.error('Error deleting inventory item:', error.message);
       alert('Error deleting item: ' + error.message);
@@ -153,6 +164,14 @@ const Inventory = ({ inventory, farms, categories, user }) => {
       setIsDeleting(null);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex w-full h-96 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

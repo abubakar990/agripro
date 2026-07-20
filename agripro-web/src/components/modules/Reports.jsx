@@ -4,7 +4,25 @@ import { formatPKR, formatDate } from '../../utils/format';
 import Button from '../shared/Button';
 import * as XLSX from 'xlsx';
 
-const Reports = ({ revenue, expenses, farms, machinery, livestock, inventory, creditEntries, loans }) => {
+import { 
+  useRevenue, useExpenses, useFarms, useMachinery, 
+  useLivestock, useInventory, useCreditEntries, useLoans 
+} from '../../hooks/queries';
+import { useFilteredData } from '../../hooks/useFilteredData';
+
+const Reports = () => {
+  const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const { data: farms = [] } = useFarms(currentOrgId);
+  const farmIds = farms.map(f => f.id);
+
+  const revenue = useFilteredData(useRevenue(farmIds).data || []);
+  const expenses = useFilteredData(useExpenses(farmIds).data || []);
+  const machinery = useFilteredData(useMachinery(farmIds).data || []);
+  const livestock = useFilteredData(useLivestock(farmIds).data || []);
+  const inventory = useFilteredData(useInventory(farmIds).data || []);
+  const creditEntries = useFilteredData(useCreditEntries(farmIds).data || []);
+  const loans = useFilteredData(useLoans(farmIds).data || []);
+
   const [activeTab, setActiveTab] = useState('balance');
 
   const financialData = useMemo(() => {
@@ -12,10 +30,16 @@ const Reports = ({ revenue, expenses, farms, machinery, livestock, inventory, cr
     const totalExp = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
     
     const getPaidAmount = (entry) => {
+      let total = 0;
       if (entry.payments && entry.payments.length > 0) {
-        return entry.payments.reduce((sum, p) => sum + Number(p.amount), 0);
+        total += entry.payments.reduce((sum, p) => sum + Number(p.amount), 0);
+      } else {
+        total += Number(entry.paid) || 0;
       }
-      return Number(entry.paid) || 0;
+      if (entry.advance) {
+        total += Number(entry.advance);
+      }
+      return total;
     };
 
     const creditReceivable = creditEntries

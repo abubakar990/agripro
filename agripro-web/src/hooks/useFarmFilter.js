@@ -1,7 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
+import { useGlobalStore } from '../store/globalStore';
 
 export const useFarmFilter = (initialFarms) => {
-  const [farmFilter, setFarmFilter] = useState('all');
+  const farmFilter = useGlobalStore(state => state.farmFilter);
+  const setFarmFilter = useGlobalStore(state => state.setFarmFilter);
 
   const filteredData = (data) => {
     if (farmFilter === 'all') return data;

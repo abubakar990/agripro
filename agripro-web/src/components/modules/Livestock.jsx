@@ -6,7 +6,7 @@ import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 
-const AnimalCard = ({ animal, farm, healthEvents = [], onRecordHealth, onEdit }) => {
+const AnimalCard = ({ animal, farm, healthEvents = [], onRecordHealth, onEdit, refetch }) => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
@@ -20,6 +20,7 @@ const AnimalCard = ({ animal, farm, healthEvents = [], onRecordHealth, onEdit })
         .eq('id', animal.id);
       
       if (error) throw error;
+      await refetch();
     } catch (error) {
       console.error('Error deleting animal:', error.message);
       alert('Error deleting animal: ' + error.message);
@@ -134,7 +135,24 @@ const AnimalCard = ({ animal, farm, healthEvents = [], onRecordHealth, onEdit })
   );
 };
 
-const Livestock = ({ livestock = [], farms = [], animalHealth = [], categories = [], user }) => {
+import { useLivestock, useAnimalHealth, useCategories, useFarms } from '../../hooks/queries';
+import { useFilteredData } from '../../hooks/useFilteredData';
+
+const Livestock = ({ user }) => {
+  const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const { data: farms = [] } = useFarms(currentOrgId);
+  const farmIds = farms.map(f => f.id);
+
+  const { data: rawLivestock = [], isLoading: loadingLivestock, refetch: refetchLivestock } = useLivestock(farmIds);
+  const livestock = useFilteredData(rawLivestock);
+
+  const { data: rawHealth = [], isLoading: loadingHealth, refetch: refetchHealth } = useAnimalHealth(farmIds);
+  const animalHealth = useFilteredData(rawHealth);
+
+  const { data: allCategories = [] } = useCategories(currentOrgId);
+  const categories = allCategories.filter(c => c.module === 'livestock');
+
+  const isLoading = loadingLivestock || loadingHealth;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -221,6 +239,7 @@ const Livestock = ({ livestock = [], farms = [], animalHealth = [], categories =
 
       const submissionData = {
         ...formData,
+        dob: formData.dob || null,
         type: finalType,
         farm_id: parseInt(formData.farm_id),
         purchase_price: parseFloat(formData.purchase_price) || 0,
@@ -241,6 +260,7 @@ const Livestock = ({ livestock = [], farms = [], animalHealth = [], categories =
         if (error) throw error;
       }
       
+      await refetchLivestock();
       setIsModalOpen(false);
       setEditingId(null);
       setCustomCategory('');
@@ -314,6 +334,7 @@ const Livestock = ({ livestock = [], farms = [], animalHealth = [], categories =
 
       if (error) throw error;
       
+      await refetchHealth();
       setIsHealthModalOpen(false);
       setSelectedAnimal(null);
     } catch (error) {
@@ -323,6 +344,14 @@ const Livestock = ({ livestock = [], farms = [], animalHealth = [], categories =
       setIsSubmitting(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex w-full h-96 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -374,10 +403,11 @@ const Livestock = ({ livestock = [], farms = [], animalHealth = [], categories =
             <AnimalCard 
               key={animal.id} 
               animal={animal} 
-              farm={farms.find(f => f.id === animal.farm_id)} 
-              healthEvents={animalHealth}
+              farm={farms.find(f => f.id === animal.farm_id)}
+              healthEvents={animalHealth.filter(h => h.livestock_id === animal.id)}
               onRecordHealth={handleRecordHealth}
               onEdit={handleEdit}
+              refetch={refetchLivestock}
             />
           ))
         ) : (

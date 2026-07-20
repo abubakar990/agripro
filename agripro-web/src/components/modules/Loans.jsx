@@ -6,11 +6,11 @@ import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 
-const LoanCard = ({ loan, farm, onRecordRepayment }) => {
+const LoanCard = ({ loan, farm, onRecordRepayment, refetch }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const paid = loan.payments?.reduce((sum, p) => sum + p.amount, 0) || loan.paid || 0;
   const remaining = loan.principal - paid;
-  const progress = (paid / loan.principal) * 100;
+  const progress = loan.principal > 0 ? (paid / loan.principal) * 100 : 0;
   const isOverdue = loan.due_date && new Date(loan.due_date) < new Date() && remaining > 0;
 
   const handleDelete = async () => {
@@ -24,6 +24,7 @@ const LoanCard = ({ loan, farm, onRecordRepayment }) => {
         .eq('id', loan.id);
       
       if (error) throw error;
+      await refetch();
     } catch (error) {
       console.error('Error deleting loan entry:', error.message);
       alert('Error deleting entry: ' + error.message);
@@ -121,7 +122,16 @@ const LoanCard = ({ loan, farm, onRecordRepayment }) => {
   );
 };
 
-const Loans = ({ loans = [], farms = [] }) => {
+import { useLoans, useFarms } from '../../hooks/queries';
+import { useFilteredData } from '../../hooks/useFilteredData';
+
+const Loans = () => {
+  const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const { data: farms = [] } = useFarms(currentOrgId);
+  const farmIds = farms.map(f => f.id);
+  
+  const { data: rawLoans = [], isLoading, refetch } = useLoans(farmIds);
+  const loans = useFilteredData(rawLoans);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRepaymentModalOpen, setIsRepaymentModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -183,6 +193,7 @@ const Loans = ({ loans = [], farms = [] }) => {
 
       if (error) throw error;
       
+      await refetch();
       setIsModalOpen(false);
       setFormData({
         farm_id: farms.length > 0 ? farms[0].id : '',
@@ -243,6 +254,7 @@ const Loans = ({ loans = [], farms = [] }) => {
 
       if (updateError) throw updateError;
       
+      await refetch();
       setIsRepaymentModalOpen(false);
       setSelectedLoan(null);
     } catch (error) {
@@ -252,6 +264,14 @@ const Loans = ({ loans = [], farms = [] }) => {
       setIsSubmitting(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex w-full h-96 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -298,6 +318,7 @@ const Loans = ({ loans = [], farms = [] }) => {
               loan={loan} 
               farm={farms.find(f => f.id === loan.farm_id)} 
               onRecordRepayment={handleRecordRepayment}
+              refetch={refetch}
             />
           ))
         ) : (

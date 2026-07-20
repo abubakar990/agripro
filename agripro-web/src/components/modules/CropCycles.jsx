@@ -6,7 +6,19 @@ import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
-const CropCycles = ({ cropCycles = [], farms = [], farmPlots = [] }) => {
+import { useCropCycles, useFarms, useFarmPlots } from '../../hooks/queries';
+import { useFilteredData } from '../../hooks/useFilteredData';
+
+const CropCycles = () => {
+  const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const { data: farms = [] } = useFarms(currentOrgId);
+  const farmIds = farms.map(f => f.id);
+
+  const { data: rawCropCycles = [], isLoading, refetch } = useCropCycles(farmIds);
+  const cropCycles = useFilteredData(rawCropCycles);
+
+  const { data: farmPlots = [] } = useFarmPlots(farmIds);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -23,7 +35,7 @@ const CropCycles = ({ cropCycles = [], farms = [], farmPlots = [] }) => {
     revenue: '',
     note: '',
     area_acres: '',
-    plot_id: '',
+    plot_ids: [],
     exp_yield_qty: '',
     act_yield_qty: '',
     yield_unit: 'Maund'
@@ -49,7 +61,7 @@ const CropCycles = ({ cropCycles = [], farms = [], farmPlots = [] }) => {
       revenue: cycle.revenue?.toString() || '',
       note: cycle.note || '',
       area_acres: cycle.area_acres?.toString() || '',
-      plot_id: cycle.plot_id?.toString() || '',
+      plot_ids: cycle.plot_ids || (cycle.plot_id ? [cycle.plot_id] : []),
       exp_yield_qty: cycle.exp_yield_qty?.toString() || '',
       act_yield_qty: cycle.act_yield_qty?.toString() || '',
       yield_unit: cycle.yield_unit || 'Maund'
@@ -78,9 +90,11 @@ const CropCycles = ({ cropCycles = [], farms = [], farmPlots = [] }) => {
           .update({
             ...formData,
             farm_id: parseInt(formData.farm_id),
+            sowing_date: formData.sowing_date || null,
+            harvest_date: formData.harvest_date || null,
             revenue: formData.revenue ? parseFloat(formData.revenue) : 0,
             area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
-            plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
+            plot_ids: formData.plot_ids.length > 0 ? formData.plot_ids : null,
             exp_yield_qty: formData.exp_yield_qty ? parseFloat(formData.exp_yield_qty) : null,
             act_yield_qty: formData.act_yield_qty ? parseFloat(formData.act_yield_qty) : null,
             yield_unit: formData.yield_unit || null
@@ -91,9 +105,11 @@ const CropCycles = ({ cropCycles = [], farms = [], farmPlots = [] }) => {
         const { error } = await supabase.from('crop_cycles').insert([{
           ...formData,
           farm_id: parseInt(formData.farm_id),
+          sowing_date: formData.sowing_date || null,
+          harvest_date: formData.harvest_date || null,
           revenue: formData.revenue ? parseFloat(formData.revenue) : 0,
           area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
-          plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
+          plot_ids: formData.plot_ids.length > 0 ? formData.plot_ids : null,
           exp_yield_qty: formData.exp_yield_qty ? parseFloat(formData.exp_yield_qty) : null,
           act_yield_qty: formData.act_yield_qty ? parseFloat(formData.act_yield_qty) : null,
           yield_unit: formData.yield_unit || null
@@ -101,6 +117,7 @@ const CropCycles = ({ cropCycles = [], farms = [], farmPlots = [] }) => {
         if (error) throw error;
       }
       
+      await refetch();
       setIsModalOpen(false);
       setEditingId(null);
       setFormData({
@@ -116,7 +133,7 @@ const CropCycles = ({ cropCycles = [], farms = [], farmPlots = [] }) => {
         revenue: '',
         note: '',
         area_acres: '',
-        plot_id: '',
+        plot_ids: [],
         exp_yield_qty: '',
         act_yield_qty: '',
         yield_unit: 'Maund'
@@ -144,7 +161,7 @@ const CropCycles = ({ cropCycles = [], farms = [], farmPlots = [] }) => {
       revenue: '',
       note: '',
       area_acres: '',
-      plot_id: '',
+      plot_ids: [],
       exp_yield_qty: '',
       act_yield_qty: '',
       yield_unit: 'Maund'
@@ -157,6 +174,7 @@ const CropCycles = ({ cropCycles = [], farms = [], farmPlots = [] }) => {
     try {
       const { error } = await supabase.from('crop_cycles').delete().eq('id', id);
       if (error) throw error;
+      await refetch();
     } catch (error) {
       console.error('Error deleting crop cycle:', error);
       alert('Error deleting crop cycle: ' + error.message);
@@ -172,9 +190,17 @@ const CropCycles = ({ cropCycles = [], farms = [], farmPlots = [] }) => {
   const avgYieldPerAcre = (() => {
     const harvested = cropCycles.filter(c => c.status === 'Harvested' && c.act_yield_qty && c.area_acres);
     if (harvested.length === 0) return null;
-    const total = harvested.reduce((sum, c) => sum + (c.act_yield_qty / c.area_acres), 0);
+    const total = harvested.reduce((sum, c) => sum + (c.area_acres && parseFloat(c.area_acres) > 0 ? c.act_yield_qty / parseFloat(c.area_acres) : 0), 0);
     return (total / harvested.length).toFixed(1);
   })();
+
+  if (isLoading) {
+    return (
+      <div className="flex w-full h-96 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -263,15 +289,23 @@ const CropCycles = ({ cropCycles = [], farms = [], farmPlots = [] }) => {
                       <IconChartBar size={16} className="text-text-muted" />
                       <span className="text-text-secondary">Area: <span className="text-text-primary font-medium">{cycle.area_acres ? `${cycle.area_acres} Acres` : cycle.area}</span></span>
                     </div>
-                    {cycle.act_yield_qty && cycle.area_acres && (
+                    {cycle.plot_ids && cycle.plot_ids.length > 0 && (
+                      <div className="flex items-start gap-3 text-sm">
+                        <IconPlant size={16} className="text-text-muted mt-0.5" />
+                        <span className="text-text-secondary">Plots: <span className="text-text-primary font-medium">
+                          {cycle.plot_ids.map(id => farmPlots.find(p => p.id === id)?.name || 'Unknown').join(', ')}
+                        </span></span>
+                      </div>
+                    )}
+                    {cycle.act_yield_qty && cycle.area_acres && parseFloat(cycle.area_acres) > 0 && (
                       <div className="flex items-center gap-3 text-sm">
                         <IconChartBar size={16} className="text-text-muted" />
-                        <span className="text-text-secondary">Yield/Acre: <span className="text-text-primary font-medium">{(cycle.act_yield_qty / cycle.area_acres).toFixed(1)} {cycle.yield_unit}/Acre</span></span>
+                        <span className="text-text-secondary">Yield/Acre: <span className="text-text-primary font-medium">{(cycle.act_yield_qty / parseFloat(cycle.area_acres)).toFixed(1)} {cycle.yield_unit}/Acre</span></span>
                       </div>
                     )}
                     <div className="flex items-center gap-3 text-sm">
                       <IconReceipt size={16} className="text-text-muted" />
-                      <span className="text-text-secondary">Revenue: <span className="text-accent-green font-bold">{formatPKR(cycle.revenue)}</span> {cycle.revenue && cycle.area_acres ? `(${formatPKR(cycle.revenue / cycle.area_acres)}/ac)` : ''}</span>
+                      <span className="text-text-secondary">Revenue: <span className="text-accent-green font-bold">{formatPKR(cycle.revenue)}</span> {cycle.revenue && cycle.area_acres && parseFloat(cycle.area_acres) > 0 ? `(${formatPKR(cycle.revenue / parseFloat(cycle.area_acres))}/ac)` : ''}</span>
                     </div>
                   </div>
                 </div>
@@ -370,17 +404,24 @@ const CropCycles = ({ cropCycles = [], farms = [], farmPlots = [] }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
-              <label className="agri-label">Plot (Optional)</label>
-              <select name="plot_id" value={formData.plot_id} onChange={(e) => {
-                const plotId = e.target.value;
-                const plot = farmPlots.find(p => p.id === parseInt(plotId));
-                setFormData(prev => ({ 
-                  ...prev, 
-                  plot_id: plotId,
-                  area_acres: plot?.area_acres?.toString() || prev.area_acres
-                }));
-              }} className="agri-input">
-                <option value="">— All Farm —</option>
+              <label className="agri-label">Plots (Hold Ctrl to select multiple)</label>
+              <select 
+                multiple
+                name="plot_ids" 
+                value={formData.plot_ids} 
+                onChange={(e) => {
+                  const selectedOptions = Array.from(e.target.selectedOptions).map(opt => parseInt(opt.value));
+                  const selectedPlots = farmPlots.filter(p => selectedOptions.includes(p.id));
+                  const totalAcres = selectedPlots.reduce((sum, p) => sum + (parseFloat(p.area_acres) || 0), 0);
+                  
+                  setFormData(prev => ({ 
+                    ...prev, 
+                    plot_ids: selectedOptions,
+                    area_acres: totalAcres > 0 ? totalAcres.toString() : prev.area_acres
+                  }));
+                }} 
+                className="agri-input h-24"
+              >
                 {farmPlots.filter(p => p.farm_id === parseInt(formData.farm_id)).map(p => (
                   <option key={p.id} value={p.id}>{p.name} ({p.area_acres} ac)</option>
                 ))}

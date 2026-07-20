@@ -6,7 +6,22 @@ import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 
-const Labor = ({ workers = [], farms = [], attendance: attendanceData = [] }) => {
+import { useWorkers, useAttendance, useFarms } from '../../hooks/queries';
+import { useFilteredData } from '../../hooks/useFilteredData';
+
+const Labor = () => {
+  const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const { data: farms = [] } = useFarms(currentOrgId);
+  const farmIds = farms.map(f => f.id);
+
+  const { data: rawWorkers = [], isLoading: loadingWorkers, refetch: refetchWorkers } = useWorkers(farmIds);
+  const workers = useFilteredData(rawWorkers);
+
+  const { data: rawAttendance = [], isLoading: loadingAttendance, refetch: refetchAttendance } = useAttendance(farmIds);
+  const attendanceData = useFilteredData(rawAttendance);
+
+  const isLoading = loadingWorkers || loadingAttendance;
+
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -34,6 +49,7 @@ const Labor = ({ workers = [], farms = [], attendance: attendanceData = [] }) =>
         }, { onConflict: 'worker_id,date' });
 
       if (error) throw error;
+      await refetchAttendance();
     } catch (error) {
       console.error('Error saving attendance:', error.message);
       alert('Error saving attendance: ' + error.message);
@@ -107,6 +123,7 @@ const Labor = ({ workers = [], farms = [], attendance: attendanceData = [] }) =>
         if (error) throw error;
       }
 
+      await refetchWorkers();
       setIsModalOpen(false);
       setEditingId(null);
       setFormData({
@@ -143,12 +160,9 @@ const Labor = ({ workers = [], farms = [], attendance: attendanceData = [] }) =>
 
     setIsDeleting(worker.id);
     try {
-      const { error } = await supabase
-        .from('workers')
-        .delete()
-        .eq('id', worker.id);
-
+      const { error } = await supabase.from('workers').delete().eq('id', worker.id);
       if (error) throw error;
+      await refetchWorkers();
     } catch (error) {
       console.error('Error deleting worker:', error.message);
       alert('Error deleting worker: ' + error.message);
@@ -156,6 +170,14 @@ const Labor = ({ workers = [], farms = [], attendance: attendanceData = [] }) =>
       setIsDeleting(null);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex w-full h-96 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

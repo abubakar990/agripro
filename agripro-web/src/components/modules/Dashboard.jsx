@@ -30,8 +30,16 @@ const KpiCard = ({ title, value, icon: Icon, colorClass, trend }) => (
   </div>
 );
 
-const Dashboard = ({ revenue, expenses, farms, workers, machinery, livestock, creditEntries, loans, inventory, attendance = [] }) => {
+import { useFilteredDashboardData } from '../../hooks/useFilteredDashboardData';
+
+const Dashboard = () => {
+  const { 
+    revenue, expenses, farms, workers, machinery, 
+    livestock, creditEntries, loans, inventory, attendance, isLoading 
+  } = useFilteredDashboardData();
+
   const stats = useMemo(() => {
+    if (isLoading) return { totalRev: 0, totalExp: 0, netProfit: 0, creditReceivable: 0, outstandingLoans: 0, assetValue: 0, attendance: '0 / 0', livestockCount: 0 };
     const totalRev = revenue.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
     const totalExp = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
     const netProfit = totalRev - totalExp;
@@ -143,6 +151,14 @@ const Dashboard = ({ revenue, expenses, farms, workers, machinery, livestock, cr
     blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', subtext: 'text-blue-600', iconBg: 'bg-blue-100', icon: 'text-blue-600' }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex w-full h-96 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -190,7 +206,7 @@ const Dashboard = ({ revenue, expenses, farms, workers, machinery, livestock, cr
                   <span className="text-text-muted">{formatPKR(item.amount)}</span>
                 </div>
                 <div className="h-2 bg-bg rounded-full overflow-hidden">
-                  <div className="h-full bg-revenue" style={{ width: `${(item.amount / revenueByCategory[0].amount) * 100}%` }}></div>
+                  <div className="h-full bg-revenue" style={{ width: `${revenueByCategory[0]?.amount > 0 ? (item.amount / revenueByCategory[0].amount) * 100 : 0}%` }}></div>
                 </div>
               </div>
             )) : (
@@ -209,7 +225,7 @@ const Dashboard = ({ revenue, expenses, farms, workers, machinery, livestock, cr
                   <span className="text-text-muted">{formatPKR(item.amount)}</span>
                 </div>
                 <div className="h-2 bg-bg rounded-full overflow-hidden">
-                  <div className="h-full bg-expense" style={{ width: `${(item.amount / expenseByCategory[0].amount) * 100}%` }}></div>
+                  <div className="h-full bg-expense" style={{ width: `${expenseByCategory[0]?.amount > 0 ? (item.amount / expenseByCategory[0].amount) * 100 : 0}%` }}></div>
                 </div>
               </div>
             )) : (

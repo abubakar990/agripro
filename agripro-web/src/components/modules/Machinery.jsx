@@ -97,7 +97,24 @@ const MachineCard = ({ machine, farm, usage, onLogUsage, onEdit, onDelete }) => 
   );
 };
 
-const Machinery = ({ machinery, farms, machineUsage = [], categories = [], user }) => {
+import { useMachinery, useMachineUsage, useCategories, useFarms } from '../../hooks/queries';
+import { useFilteredData } from '../../hooks/useFilteredData';
+
+const Machinery = ({ user }) => {
+  const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const { data: farms = [] } = useFarms(currentOrgId);
+  const farmIds = farms.map(f => f.id);
+
+  const { data: rawMachinery = [], isLoading: loadingMachinery, refetch: refetchMachinery } = useMachinery(farmIds);
+  const machinery = useFilteredData(rawMachinery);
+
+  const { data: rawUsage = [], isLoading: loadingUsage, refetch: refetchUsage } = useMachineUsage(farmIds);
+  const machineUsage = useFilteredData(rawUsage);
+
+  const { data: allCategories = [] } = useCategories(currentOrgId);
+  const categories = allCategories.filter(c => c.module === 'machinery');
+
+  const isLoading = loadingMachinery || loadingUsage;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUsageModalOpen, setIsUsageModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -195,7 +212,7 @@ const Machinery = ({ machinery, farms, machineUsage = [], categories = [], user 
         ...formData,
         type: finalType,
         farm_id: parseInt(formData.farm_id),
-        year: parseInt(formData.year),
+        year: formData.year ? parseInt(formData.year) : null,
         purchase_price: parseFloat(formData.purchase_price) || 0,
         current_value: parseFloat(formData.current_value) || 0
       };
@@ -211,6 +228,7 @@ const Machinery = ({ machinery, farms, machineUsage = [], categories = [], user 
         if (error) throw error;
       }
       
+      await refetchMachinery();
       setIsModalOpen(false);
       setEditingId(null);
       setCustomCategory('');
@@ -243,9 +261,10 @@ const Machinery = ({ machinery, farms, machineUsage = [], categories = [], user 
         hours: parseFloat(usageData.hours) || 0,
         fuel_litres: parseFloat(usageData.fuel_litres) || 0
       }]);
-      
+
       if (error) throw error;
       
+      await refetchUsage();
       setIsUsageModalOpen(false);
       setUsageData({
         date: new Date().toISOString().split('T')[0],
@@ -290,11 +309,20 @@ const Machinery = ({ machinery, farms, machineUsage = [], categories = [], user 
     try {
       const { error } = await supabase.from('machinery').delete().eq('id', id);
       if (error) throw error;
+      await refetchMachinery();
     } catch (error) {
       console.error('Error deleting machinery:', error);
       alert('Error deleting machinery: ' + error.message);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex w-full h-96 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -1,15 +1,19 @@
-import { useMemo } from 'react';
 import { useGlobalStore } from '../store/globalStore';
 
-export const useDateFilter = () => {
+export const useFilteredData = (dataArray) => {
+  const farmFilter = useGlobalStore(state => state.farmFilter);
   const dateRange = useGlobalStore(state => state.dateRange);
-  const setDateRange = useGlobalStore(state => state.setDateRange);
   const customRange = useGlobalStore(state => state.customRange);
-  const setCustomRange = useGlobalStore(state => state.setCustomRange);
+
+  if (!dataArray || !Array.isArray(dataArray)) return [];
+
+  const filterByFarm = (data) => {
+    if (farmFilter === 'all') return data;
+    return data.filter(item => item.farm_id === Number(farmFilter));
+  };
 
   const filterByDate = (data) => {
     if (dateRange === 'all') return data;
-    
     const now = new Date();
     let startDate = new Date();
 
@@ -21,28 +25,21 @@ export const useDateFilter = () => {
       const start = new Date(customRange.start);
       const end = new Date(customRange.end);
       end.setHours(23, 59, 59, 999);
-      
       return data.filter(item => {
-        const itemDate = new Date(item.date || item.created_at || item.sowing_date);
+        const dateStr = item.date || item.created_at || item.sowing_date || item.dob;
+        if (!dateStr) return true;
+        const itemDate = new Date(dateStr);
         return itemDate >= start && itemDate <= end;
       });
     }
 
     return data.filter(item => {
-      // Look for common date fields
       const dateStr = item.date || item.created_at || item.sowing_date || item.dob;
-      if (!dateStr) return true; // If no date, include it? Or exclude? Usually assets stay.
-      
+      if (!dateStr) return true;
       const itemDate = new Date(dateStr);
       return itemDate >= startDate;
     });
   };
 
-  return {
-    dateRange,
-    setDateRange,
-    customRange,
-    setCustomRange,
-    filterByDate
-  };
+  return filterByDate(filterByFarm(dataArray));
 };

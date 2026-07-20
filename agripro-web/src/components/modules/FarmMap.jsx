@@ -10,7 +10,7 @@ import { formatPKR } from '../../utils/format';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
-import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconHandGrab, IconGridDots, IconCut, IconVectorTriangle, IconList, IconArrowBackUp, IconArrowForwardUp } from '@tabler/icons-react';
+import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconGridDots, IconCut, IconVectorTriangle, IconList, IconArrowBackUp, IconArrowForwardUp } from '@tabler/icons-react';
 
 const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCreated, onAcreBoxClick, onPlotRedrawn, onPlotCut, mapRef }) => {
   const map = useMap();
@@ -172,8 +172,22 @@ const MapController = ({ farm, plots, drawMode, onPlotCreated, onFarmBoundaryCre
   return null;
 };
 
-const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], revenue = [], acrePresets = [], refetch }) => {
+import { useFarms, useFarmPlots, useCropCycles, useExpenses, useRevenue, useAcrePresets } from '../../hooks/queries';
+import { useFilteredData } from '../../hooks/useFilteredData';
+
+const FarmMap = () => {
   const { farmId } = useParams();
+  const numericFarmId = parseInt(farmId);
+  const currentOrgId = localStorage.getItem('agripro_current_org_id');
+
+  const { data: farms = [] } = useFarms(currentOrgId);
+  const { data: rawFarmPlots = [], refetch } = useFarmPlots([numericFarmId]);
+  const farmPlots = useFilteredData(rawFarmPlots);
+  const { data: cropCycles = [] } = useCropCycles([numericFarmId]);
+  const { data: expenses = [] } = useExpenses([numericFarmId]);
+  const { data: revenue = [] } = useRevenue([numericFarmId]);
+  const { data: acrePresets = [] } = useAcrePresets(currentOrgId);
+
   const navigate = useNavigate();
   const mapRef = useRef(null);
   const plotLayersRef = useRef({});
@@ -207,7 +221,17 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     setRedoStack([]);
   }, []);
 
-  const handleUndo = async () => {
+  const handleUndo = useCallback(async () => {
+    if (isDrawMode && mapRef.current) {
+      try {
+        if (typeof mapRef.current.pm.Draw.Polygon._removeLastVertex === 'function') {
+           mapRef.current.pm.Draw.Polygon._removeLastVertex();
+           // Return early so we don't pop the global stack while actively drawing
+           return;
+        }
+      } catch(e) {}
+    }
+
     if (undoStack.length === 0) return;
     const action = undoStack[undoStack.length - 1];
     try {
@@ -218,9 +242,10 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     } catch (err) {
       alert("Undo failed: " + err.message);
     }
-  };
+  }, [isDrawMode, undoStack, refetch]);
 
-  const handleRedo = async () => {
+  const handleRedo = useCallback(async () => {
+    if (isDrawMode) return; // Prevent redo while actively drawing
     if (redoStack.length === 0) return;
     const action = redoStack[redoStack.length - 1];
     try {
@@ -231,7 +256,35 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     } catch (err) {
       alert("Redo failed: " + err.message);
     }
-  };
+  }, [isDrawMode, redoStack, refetch]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Escape key to cancel current tool/drawing
+      if (e.key === 'Escape') {
+        cancelDraw();
+      }
+      
+      // Ctrl+Z or Cmd+Z
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleRedo();
+        } else {
+          e.preventDefault();
+          handleUndo();
+        }
+      }
+      // Ctrl+Y or Cmd+Y (alternative redo)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo, cancelDraw]);
   
   const [isAcreModalOpen, setIsAcreModalOpen] = useState(false);
   const [customPreset, setCustomPreset] = useState({ name: '', length_ft: '', width_ft: '' });
@@ -249,7 +302,6 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     notes: ''
   });
 
-  const numericFarmId = parseInt(farmId);
   const farm = useMemo(() => farms.find(f => f.id === numericFarmId), [farms, numericFarmId]);
   const plots = useMemo(() => farmPlots.filter(p => p.farm_id === numericFarmId), [farmPlots, numericFarmId]);
 
@@ -290,6 +342,16 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
         if (!adjustingPlotId) setDynamicAreaAcres(null);
       }
     }
+    return () => {
+      if (farmLayerRef.current && Array.isArray(farmLayerRef.current)) {
+        farmLayerRef.current.forEach(layer => {
+          if (layer && layer.pm) {
+            layer.off('pm:markerdrag');
+            layer.off('pm:edit');
+          }
+        });
+      }
+    };
   }, [adjustingFarmBoundary, farm?.boundary, adjustingPlotId]);
 
   useEffect(() => {
@@ -331,6 +393,15 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     } else if (!adjustingFarmBoundary) {
       setDynamicAreaAcres(null);
     }
+    return () => {
+      if (adjustingPlotId && plotLayersRef.current[adjustingPlotId]) {
+        const layer = plotLayersRef.current[adjustingPlotId];
+        if (layer && layer.pm) {
+          layer.off('pm:markerdrag');
+          layer.off('pm:edit');
+        }
+      }
+    };
   }, [adjustingPlotId, plots, adjustingFarmBoundary]);
 
   const handleSearch = async (e) => {
@@ -372,14 +443,15 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     if (mapRef.current) mapRef.current.pm.disableDraw();
   };
 
-  const cancelDraw = () => {
+  const cancelDraw = useCallback(() => {
     setIsDrawMode(null);
     setRedrawPlotId(null);
+    setSelectedPlotIdsForMerge([]);
     setAdjustingPlotId(null);
     setAdjustingFarmBoundary(false);
     setDynamicAreaAcres(null);
     if (mapRef.current) mapRef.current.pm.disableDraw();
-  };
+  }, []);
 
   const handleFarmBoundaryCreated = useCallback(async (geojson, acres, lat, lng) => {
     setIsDrawMode(null);
@@ -423,6 +495,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       }
       
       alert('Farm boundary saved!');
+      if (refetch) refetch();
     } catch (err) {
       alert('Error saving farm boundary: ' + err.message);
     }
@@ -471,6 +544,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       
       setAdjustingFarmBoundary(false);
       alert('Farm boundary adjustments saved and plots adjusted!');
+      if (refetch) refetch();
     } catch (err) {
       alert('Error saving boundary: ' + err.message);
     }
@@ -516,6 +590,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       }
       
       alert('Boundary area deleted and plots adjusted.');
+      if (refetch) refetch();
     } catch (err) {
       alert('Error deleting boundary: ' + err.message);
     }
@@ -532,17 +607,33 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     setIsDrawMode(null);
     if (!redrawPlotId) return;
     try {
+      // Fetch the old plot for undo
+      const oldPlot = plots.find(p => p.id === redrawPlotId);
+      if (!oldPlot) return;
+      
       const { error } = await supabase.from('farm_plots').update({
         boundary: geojson,
         area_acres: acres
       }).eq('id', redrawPlotId);
       if (error) throw error;
+      
+      pushAction({
+        name: 'Redraw Plot',
+        undo: async () => {
+          await supabase.from('farm_plots').update({ boundary: oldPlot.boundary, area_acres: oldPlot.area_acres }).eq('id', redrawPlotId);
+        },
+        redo: async () => {
+          await supabase.from('farm_plots').update({ boundary: geojson, area_acres: acres }).eq('id', redrawPlotId);
+        }
+      });
+      
       setRedrawPlotId(null);
       alert('Plot boundary updated!');
+      if (refetch) refetch();
     } catch (err) {
       alert('Error updating boundary: ' + err.message);
     }
-  }, [redrawPlotId]);
+  }, [redrawPlotId, plots, pushAction, refetch]);
 
   const handleSavePlotAdjustment = async () => {
     if (!adjustingPlotId || !plotLayersRef.current[adjustingPlotId]) return;
@@ -551,14 +642,29 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
       const geojson = layerToGeoJSON(layer);
       const acres = calculateAcresFromLatLngs(layer.getLatLngs()[0]);
       
+      const oldPlot = plots.find(p => p.id === adjustingPlotId);
+      if (!oldPlot) return;
+      
       const { error } = await supabase.from('farm_plots').update({
         boundary: geojson,
         area_acres: acres
       }).eq('id', adjustingPlotId);
       
       if (error) throw error;
+      
+      pushAction({
+        name: 'Adjust Plot Vertex',
+        undo: async () => {
+          await supabase.from('farm_plots').update({ boundary: oldPlot.boundary, area_acres: oldPlot.area_acres }).eq('id', adjustingPlotId);
+        },
+        redo: async () => {
+          await supabase.from('farm_plots').update({ boundary: geojson, area_acres: acres }).eq('id', adjustingPlotId);
+        }
+      });
+      
       setAdjustingPlotId(null);
       alert('Plot adjustments saved!');
+      if (refetch) refetch();
     } catch (err) {
       alert('Error saving boundary: ' + err.message);
     }
@@ -571,6 +677,17 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
     try {
       const rotatedGeoJSON = rotatePolygon(plot.boundary, angle);
       await supabase.from('farm_plots').update({ boundary: rotatedGeoJSON }).eq('id', plotId);
+      
+      pushAction({
+        name: 'Rotate Plot',
+        undo: async () => {
+          await supabase.from('farm_plots').update({ boundary: plot.boundary }).eq('id', plotId);
+        },
+        redo: async () => {
+          await supabase.from('farm_plots').update({ boundary: rotatedGeoJSON }).eq('id', plotId);
+        }
+      });
+      
       if (refetch) refetch();
     } catch (err) {
       alert('Error rotating plot: ' + err.message);
@@ -823,19 +940,31 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
   const handleSavePlot = async (e) => {
     e.preventDefault();
     try {
-      const { error } = await supabase.from('farm_plots').insert([{
+      const newPlotData = {
         farm_id: numericFarmId,
         boundary: pendingPlotGeoJSON,
         area_acres: pendingPlotAcres,
         ...plotFormData
-      }]);
+      };
+      const { data: inserted, error } = await supabase.from('farm_plots').insert([newPlotData]).select();
       if (error) throw error;
+      
+      pushAction({
+        name: 'Draw Plot',
+        undo: async () => {
+          await supabase.from('farm_plots').delete().eq('id', inserted[0].id);
+        },
+        redo: async () => {
+          await supabase.from('farm_plots').insert([inserted[0]]);
+        }
+      });
       
       setIsPlotModalOpen(false);
       setPlotFormData({ name: '', soil_type: 'Loamy', soil_quality: 'Good', drainage: 'Good', water_source: '', notes: '' });
       setPendingPlotGeoJSON(null);
       setPendingPlotAcres(0);
       alert('Plot created successfully!');
+      if (refetch) refetch();
     } catch (err) {
       alert('Error saving plot: ' + err.message);
     }
@@ -1011,6 +1140,27 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
             <IconVectorTriangle size={20} />
           </button>
         </div>
+        
+        {/* Undo / Redo Toolbar */}
+        <div className="dji-panel flex flex-col overflow-hidden mt-2">
+          <button 
+            className={`p-3 transition-colors border-b border-slate-700/50 text-slate-300 hover:bg-slate-800 hover:text-emerald-400 ${undoStack.length === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}
+            onClick={handleUndo}
+            disabled={undoStack.length === 0}
+            title="Undo Last Map Action"
+          >
+            <IconArrowBackUp size={20} />
+          </button>
+          
+          <button 
+            className={`p-3 transition-colors text-slate-300 hover:bg-slate-800 hover:text-emerald-400 ${redoStack.length === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}
+            onClick={handleRedo}
+            disabled={redoStack.length === 0}
+            title="Redo Map Action"
+          >
+            <IconArrowForwardUp size={20} />
+          </button>
+        </div>
       </div>
 
       {/* Grid Generator Control Panel */}
@@ -1056,7 +1206,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
             <div className="flex justify-between items-center mt-4 pt-3 border-t border-slate-700/50">
               <span className="text-xs font-bold text-amber-400">{gridPreviewPlots.length} plots generated</span>
               <div className="flex gap-2">
-                <button className="dji-button" onClick={() => setIsDrawMode(null)}>Cancel</button>
+                <button className="dji-button" onClick={cancelDraw}>Cancel</button>
                 <button className="dji-button-primary" onClick={handleSaveGrid}><IconCheck size={14} className="mr-1"/> Save Grid</button>
               </div>
             </div>
@@ -1364,7 +1514,7 @@ const FarmMap = ({ farms = [], farmPlots = [], cropCycles = [], expenses = [], r
                   </button>
                 )}
                 
-                <button onClick={() => setIsDrawMode(null)} className="text-xs text-rose-400 font-bold hover:text-rose-300 flex items-center justify-center w-full py-1">
+                <button onClick={cancelDraw} className="text-xs text-rose-400 font-bold hover:text-rose-300 flex items-center justify-center w-full py-1">
                   Cancel Tool
                 </button>
               </div>

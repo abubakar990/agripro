@@ -6,7 +6,21 @@ import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
-const Irrigation = ({ irrigationLog = [], farms = [], farmPlots = [], cropCycles = [] }) => {
+import { useIrrigationLog, useFarms, useFarmPlots, useCropCycles } from '../../hooks/queries';
+import { useFilteredData } from '../../hooks/useFilteredData';
+import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
+
+const Irrigation = () => {
+  const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const { data: farms = [] } = useFarms(currentOrgId);
+  const farmIds = farms.map(f => f.id);
+
+  const { data: rawIrrigationLog = [], isLoading, refetch } = useIrrigationLog(farmIds);
+  const irrigationLog = useFilteredData(rawIrrigationLog);
+
+  const { data: farmPlots = [] } = useFarmPlots(farmIds);
+  const { data: cropCycles = [] } = useCropCycles(farmIds);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -60,6 +74,7 @@ const Irrigation = ({ irrigationLog = [], farms = [], farmPlots = [], cropCycles
       
       if (error) throw error;
       
+      await refetch();
       setIsModalOpen(false);
       setFormData({
         farm_id: farms.length > 0 ? farms[0].id : '',
@@ -87,6 +102,7 @@ const Irrigation = ({ irrigationLog = [], farms = [], farmPlots = [], cropCycles
     try {
       const { error } = await supabase.from('irrigation_log').delete().eq('id', id);
       if (error) throw error;
+      await refetch();
     } catch (error) {
       console.error('Error deleting irrigation log:', error);
       alert('Error deleting irrigation log: ' + error.message);
@@ -94,15 +110,21 @@ const Irrigation = ({ irrigationLog = [], farms = [], farmPlots = [], cropCycles
   };
 
   const stats = useMemo(() => {
+    const context = { farmPlots, cropCycles, farms };
     const totalHours = irrigationLog.reduce((sum, l) => sum + (Number(l.hours) || 0), 0);
     const totalCost = irrigationLog.reduce((sum, l) => sum + (Number(l.cost) || 0), 0);
-    const totalArea = irrigationLog.reduce((sum, l) => {
-      const a = parseFloat(l.area_acres) || 0;
-      return a > 0 ? sum + a : sum;
-    }, 0);
+    const totalArea = calcTotalArea(irrigationLog, context) || 0;
     const costPerAcre = totalArea > 0 ? totalCost / totalArea : null;
     return { totalHours, totalCost, costPerAcre };
-  }, [irrigationLog]);
+  }, [irrigationLog, farmPlots, cropCycles, farms]);
+
+  if (isLoading) {
+    return (
+      <div className="flex w-full h-96 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -174,7 +196,7 @@ const Irrigation = ({ irrigationLog = [], farms = [], farmPlots = [], cropCycles
                       <td className="px-6 py-4 text-right font-medium">{log.hours}h</td>
                       <td className="px-6 py-4 text-right font-pkr text-expense">{formatPKR(log.cost)}</td>
                       <td className="px-6 py-4 text-right font-pkr text-text-secondary">
-                        {log.area_acres ? formatPKR(log.cost / log.area_acres) : '—'}
+                        {formatPerAcre(log.cost, resolveArea(log, { farmPlots, cropCycles, farms }))}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <button 
@@ -251,7 +273,7 @@ const Irrigation = ({ irrigationLog = [], farms = [], farmPlots = [], cropCycles
               <label className="agri-label">Crop Cycle</label>
               <select name="crop_cycle_id" value={formData.crop_cycle_id} onChange={handleCropCycleChange} className="agri-input">
                 <option value="">— None —</option>
-                {cropCycles.filter(c => c.farm_id === parseInt(formData.farm_id) && (!formData.plot_id || c.plot_id === parseInt(formData.plot_id))).map(c => (
+                {cropCycles.filter(c => c.farm_id === parseInt(formData.farm_id) && (!formData.plot_id || (c.plot_ids && c.plot_ids.includes(parseInt(formData.plot_id))))).map(c => (
                   <option key={c.id} value={c.id}>{c.crop} ({c.area_acres || '?'} ac)</option>
                 ))}
               </select>

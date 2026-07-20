@@ -7,7 +7,15 @@ import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
-const Farms = ({ farms, currentOrg, farmPlots = [] }) => {
+import { useFarms, useFarmPlots } from '../../hooks/queries';
+import { useFilteredData } from '../../hooks/useFilteredData';
+
+const Farms = ({ currentOrg }) => {
+  const currentOrgId = currentOrg?.id || localStorage.getItem('agripro_current_org_id');
+  const { data: rawFarms = [], isLoading, refetch } = useFarms(currentOrgId);
+  const farms = useFilteredData(rawFarms);
+  const farmIds = farms.map(f => f.id);
+  const { data: farmPlots = [] } = useFarmPlots(farmIds);
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -67,6 +75,7 @@ const Farms = ({ farms, currentOrg, farmPlots = [] }) => {
             location: formData.location,
             ownership: formData.ownership,
             status: formData.status,
+            area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
             land_value: parseFloat(formData.land_value) || 0
           })
           .eq('id', editingFarm.id);
@@ -78,11 +87,13 @@ const Farms = ({ farms, currentOrg, farmPlots = [] }) => {
           ownership: formData.ownership,
           status: formData.status,
           org_id: currentOrg?.id,
+          area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
           land_value: parseFloat(formData.land_value) || 0
         }]);
         if (error) throw error;
       }
       
+      await refetch();
       setIsModalOpen(false);
       setEditingFarm(null);
       setFormData({
@@ -108,6 +119,7 @@ const Farms = ({ farms, currentOrg, farmPlots = [] }) => {
     try {
       const { error } = await supabase.from('farms').delete().eq('id', id);
       if (error) throw error;
+      await refetch();
     } catch (error) {
       console.error('Error deleting farm:', error);
       alert('Error deleting farm: ' + error.message);
@@ -134,6 +146,14 @@ const Farms = ({ farms, currentOrg, farmPlots = [] }) => {
     });
     setIsModalOpen(true);
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex w-full h-96 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

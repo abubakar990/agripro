@@ -5,8 +5,24 @@ import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
+import { useExpenses, useFarms, useCategories, useFarmPlots, useCropCycles } from '../../hooks/queries';
+import { useFilteredData } from '../../hooks/useFilteredData';
+import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
 
-const Expenses = ({ expenses, farms, categories, user, farmPlots = [], cropCycles = [] }) => {
+const Expenses = ({ user }) => {
+  const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const { data: farms = [] } = useFarms(currentOrgId);
+  const farmIds = farms.map(f => f.id);
+  
+  const { data: rawExpenses = [], isLoading, refetch } = useExpenses(farmIds);
+  const expenses = useFilteredData(rawExpenses);
+  
+  const { data: allCategories = [] } = useCategories(currentOrgId);
+  const categories = allCategories.filter(c => c.module === 'expense');
+  
+  const { data: farmPlots = [] } = useFarmPlots(farmIds);
+  const { data: cropCycles = [] } = useCropCycles(farmIds);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -24,12 +40,10 @@ const Expenses = ({ expenses, farms, categories, user, farmPlots = [], cropCycle
   });
 
   const stats = useMemo(() => {
+    const context = { farmPlots, cropCycles, farms };
     const total = expenses.reduce((sum, e) => sum + e.amount, 0);
     const count = expenses.length;
-    const totalArea = expenses.reduce((sum, e) => {
-      const a = parseFloat(e.area_acres) || 0;
-      return a > 0 ? sum + a : sum;
-    }, 0);
+    const totalArea = calcTotalArea(expenses, context) || 0;
     const costPerAcre = totalArea > 0 ? total / totalArea : null;
     const catSum = expenses.reduce((acc, e) => {
       acc[e.category] = (acc[e.category] || 0) + e.amount;
@@ -147,6 +161,7 @@ const Expenses = ({ expenses, farms, categories, user, farmPlots = [], cropCycle
         if (error) throw error;
       }
       
+      await refetch();
       setIsModalOpen(false);
       setEditingId(null);
       setCustomCategory('');
@@ -175,6 +190,7 @@ const Expenses = ({ expenses, farms, categories, user, farmPlots = [], cropCycle
     try {
       const { error } = await supabase.from('expenses').delete().eq('id', id);
       if (error) throw error;
+      await refetch();
     } catch (error) {
       console.error('Error deleting expense:', error);
       alert('Error deleting expense: ' + error.message);
@@ -197,6 +213,14 @@ const Expenses = ({ expenses, farms, categories, user, farmPlots = [], cropCycle
     });
     setIsModalOpen(true);
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex w-full h-96 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -288,7 +312,7 @@ const Expenses = ({ expenses, farms, categories, user, farmPlots = [], cropCycle
                       <td className="px-6 py-4 font-bold">{e.party}</td>
                       <td className="px-6 py-4 text-right font-pkr text-expense">{formatPKR(e.amount)}</td>
                       <td className="px-6 py-4 text-right font-pkr text-text-secondary">
-                        {e.area_acres ? formatPKR(e.amount / e.area_acres) : '—'}
+                        {formatPerAcre(e.amount, resolveArea(e, { farmPlots, cropCycles, farms }))}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className="flex justify-center gap-1">
@@ -375,7 +399,7 @@ const Expenses = ({ expenses, farms, categories, user, farmPlots = [], cropCycle
               <label className="text-xs font-bold text-text-muted uppercase">Crop Cycle</label>
               <select name="crop_cycle_id" value={formData.crop_cycle_id} onChange={handleCropCycleChange} className="agri-input">
                 <option value="">— None —</option>
-                {cropCycles.filter(c => c.farm_id === parseInt(formData.farm_id) && (!formData.plot_id || c.plot_id === parseInt(formData.plot_id))).map(c => (
+                {cropCycles.filter(c => c.farm_id === parseInt(formData.farm_id) && (!formData.plot_id || (c.plot_ids && c.plot_ids.includes(parseInt(formData.plot_id))))).map(c => (
                   <option key={c.id} value={c.id}>{c.crop} ({c.area_acres || '?'} ac)</option>
                 ))}
               </select>

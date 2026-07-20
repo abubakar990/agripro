@@ -6,11 +6,11 @@ import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 
-const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory }) => {
+const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory, refetch }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const paid = entry.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
   const remaining = entry.total_amount - (entry.advance || 0) - paid;
-  const progress = (( (entry.advance || 0) + paid) / entry.total_amount) * 100;
+  const progress = entry.total_amount > 0 ? (( (entry.advance || 0) + paid) / entry.total_amount) * 100 : 0;
   
   const isOverdue = new Date(entry.due_date) < new Date() && remaining > 0;
 
@@ -25,6 +25,7 @@ const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory }) => {
         .eq('id', entry.id);
       
       if (error) throw error;
+      await refetch();
     } catch (error) {
       console.error('Error deleting credit entry:', error.message);
       alert('Error deleting entry: ' + error.message);
@@ -125,7 +126,16 @@ const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory }) => {
   );
 };
 
-const CreditLedger = ({ creditEntries = [], farms }) => {
+import { useCreditEntries, useFarms } from '../../hooks/queries';
+import { useFilteredData } from '../../hooks/useFilteredData';
+
+const CreditLedger = () => {
+  const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const { data: farms = [] } = useFarms(currentOrgId);
+  const farmIds = farms.map(f => f.id);
+  
+  const { data: rawCreditEntries = [], isLoading, refetch } = useCreditEntries(farmIds);
+  const creditEntries = useFilteredData(rawCreditEntries);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
@@ -183,6 +193,7 @@ const CreditLedger = ({ creditEntries = [], farms }) => {
 
       if (error) throw error;
       
+      await refetch();
       setIsModalOpen(false);
       setFormData({
         farm_id: farms[0]?.id || '',
@@ -229,6 +240,7 @@ const CreditLedger = ({ creditEntries = [], farms }) => {
 
       if (error) throw error;
       
+      await refetch();
       setIsPaymentModalOpen(false);
       setSelectedEntry(null);
     } catch (error) {
@@ -243,6 +255,14 @@ const CreditLedger = ({ creditEntries = [], farms }) => {
     setSelectedEntry(entry);
     setIsHistoryModalOpen(true);
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex w-full h-96 items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -289,6 +309,7 @@ const CreditLedger = ({ creditEntries = [], farms }) => {
             farm={farms.find(f => f.id === entry.farm_id)} 
             onRecordPayment={handleRecordPayment}
             onViewHistory={handleViewHistory}
+            refetch={refetch}
           />
         ))}
       </div>

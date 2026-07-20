@@ -26,10 +26,10 @@ export const calculateAcresFromLatLngs = (latlngs) => {
   
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
-    const lat1 = toRad(latlngs[i].lat || latlngs[i][0]);
-    const lng1 = toRad(latlngs[i].lng || latlngs[i][1]);
-    const lat2 = toRad(latlngs[j].lat || latlngs[j][0]);
-    const lng2 = toRad(latlngs[j].lng || latlngs[j][1]);
+    const lat1 = toRad(latlngs[i].lat !== undefined ? latlngs[i].lat : latlngs[i][0]);
+    const lng1 = toRad(latlngs[i].lng !== undefined ? latlngs[i].lng : latlngs[i][1]);
+    const lat2 = toRad(latlngs[j].lat !== undefined ? latlngs[j].lat : latlngs[j][0]);
+    const lng2 = toRad(latlngs[j].lng !== undefined ? latlngs[j].lng : latlngs[j][1]);
     
     calcArea += (lng2 - lng1) * (2 + Math.sin(lat1) + Math.sin(lat2));
   }
@@ -65,8 +65,8 @@ export const geoJSONToLatLngs = (geoJSON) => {
 export const getPolygonCenter = (latlngs) => {
   if (!latlngs || latlngs.length === 0) return [31.5, 73.1];
   
-  const latSum = latlngs.reduce((sum, p) => sum + (p.lat || p[0]), 0);
-  const lngSum = latlngs.reduce((sum, p) => sum + (p.lng || p[1]), 0);
+  const latSum = latlngs.reduce((sum, p) => sum + (p.lat !== undefined ? p.lat : p[0]), 0);
+  const lngSum = latlngs.reduce((sum, p) => sum + (p.lng !== undefined ? p.lng : p[1]), 0);
   
   return [latSum / latlngs.length, lngSum / latlngs.length];
 };
@@ -147,7 +147,7 @@ export const addPolygonToFeatureCollection = (existingGeoJSON, newPolygonGeoJSON
 };
 
 export const autoGeneratePlotsForBoundary = (farmBoundaryGeoJSON, lengthFt, widthFt, angleDegrees = 0, keepInside = false, offsetXFt = 0, offsetYFt = 0) => {
-  if (!farmBoundaryGeoJSON || !lengthFt || !widthFt) return [];
+  if (!farmBoundaryGeoJSON || !lengthFt || !widthFt || lengthFt <= 0 || widthFt <= 0) return [];
   
   try {
     const farmFeature = farmBoundaryGeoJSON.type === 'FeatureCollection' ? farmBoundaryGeoJSON : (farmBoundaryGeoJSON.type === 'Feature' ? farmBoundaryGeoJSON : turf.feature(farmBoundaryGeoJSON));

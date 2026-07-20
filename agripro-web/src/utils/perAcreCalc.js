@@ -61,10 +61,33 @@ export const formatPerAcre = (amount, area) => {
  * Calculate total area from entries that have area
  */
 export const totalArea = (entries, context) => {
-  const areas = entries.map(e => resolveArea(e, context)).filter(a => a !== null);
+  if (!entries || entries.length === 0) return null;
+  const uniqueAreas = new Map(); // key: source_type:id, value: area
+
+  entries.forEach(entry => {
+    if (entry.area_acres && parseFloat(entry.area_acres) > 0) {
+      uniqueAreas.set(`entry:${entry.id}`, parseFloat(entry.area_acres));
+    } else if (entry.plot_id) {
+      const plot = context.farmPlots?.find(p => p.id === entry.plot_id);
+      if (plot?.area_acres && parseFloat(plot.area_acres) > 0) {
+        uniqueAreas.set(`plot:${entry.plot_id}`, parseFloat(plot.area_acres));
+      }
+    } else if (entry.crop_cycle_id) {
+      const cycle = context.cropCycles?.find(c => c.id === entry.crop_cycle_id);
+      if (cycle?.area_acres && parseFloat(cycle.area_acres) > 0) {
+        uniqueAreas.set(`cycle:${entry.crop_cycle_id}`, parseFloat(cycle.area_acres));
+      }
+    } else if (entry.farm_id) {
+      const farm = context.farms?.find(f => f.id === entry.farm_id);
+      if (farm?.area_acres && parseFloat(farm.area_acres) > 0) {
+        uniqueAreas.set(`farm:${entry.farm_id}`, parseFloat(farm.area_acres));
+      }
+    }
+  });
+
+  const areas = Array.from(uniqueAreas.values());
   if (areas.length === 0) return null;
-  // Use max unique area to avoid double-counting
-  return Math.max(...areas);
+  return areas.reduce((sum, a) => sum + a, 0);
 };
 
 /**
@@ -72,7 +95,7 @@ export const totalArea = (entries, context) => {
  */
 export const getPlotScore = (plotId, { expenses = [], revenue = [], cropCycles = [], farmPlots = [], farms = [] } = {}) => {
   const plot = farmPlots.find(p => p.id === plotId);
-  if (!plot?.area_acres) return null;
+  if (!plot?.area_acres || parseFloat(plot.area_acres) <= 0) return null;
   
   const area = parseFloat(plot.area_acres);
   const plotExpenses = expenses.filter(e => e.plot_id === plotId);
