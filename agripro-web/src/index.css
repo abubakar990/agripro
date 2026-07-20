@@ -4,130 +4,136 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  background-color: #f0f4f0;
-  color: #1a1a1a;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-}
+@layer base {
+  :root {
+    background-color: #f0f4f0;
+    color: #1a1a1a;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
 
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-/* Custom Table Styles */
-.agri-table-header {
-  @apply bg-primary text-white text-xs font-bold uppercase tracking-wider;
-}
-
-.agri-table-row {
-  @apply border-b border-border text-sm;
-}
-
-.agri-table-row:nth-child(even) {
-  @apply bg-[#fafcfa];
-}
-
-.agri-table-row:nth-child(odd) {
-  @apply bg-white;
-}
-
-/* Scrollbar Hide Utility */
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-/* Custom Scrollbar */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  @apply bg-bg;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  @apply bg-border rounded-full hover:bg-text-muted transition-colors;
-}
-
-/* Mobile-friendly spacing */
-@media (max-width: 640px) {
-  .agri-card {
-    @apply rounded-lg;
+  body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
   }
 }
 
-/* PKR Formatting Class */
-.font-pkr {
-  font-weight: 700;
-  @apply text-primary;
+@layer components {
+  /* Custom Table Styles */
+  .agri-table-header {
+    @apply bg-primary text-white text-xs font-bold uppercase tracking-wider;
+  }
+
+  .agri-table-row {
+    @apply border-b border-border text-sm;
+  }
+
+  .agri-table-row:nth-child(even) {
+    @apply bg-[#fafcfa];
+  }
+
+  .agri-table-row:nth-child(odd) {
+    @apply bg-white;
+  }
+
+  /* Card Style */
+  .agri-card {
+    @apply bg-white rounded-card shadow-card;
+  }
+
+  /* Sidebar Active State */
+  .sidebar-active {
+    @apply bg-white bg-opacity-20;
+  }
+
+  /* Form Styles */
+  .agri-label {
+    @apply text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-1 block;
+  }
+
+  .agri-input {
+    @apply w-full h-11 px-4 bg-white border border-border rounded-input text-sm text-text-primary focus:outline-none focus:border-primary transition-all placeholder:text-text-muted;
+  }
+
+  /* Farm Map Styles */
+  .farm-map-container {
+    @apply overflow-hidden relative bg-[#0a0a0a];
+  }
+
+  .farm-map-container .leaflet-container {
+    height: 100%;
+    width: 100%;
+    z-index: 1;
+    background: #0a0a0a;
+  }
+
+  .dji-panel {
+    @apply bg-slate-900/90 backdrop-blur-md border border-slate-700/50 shadow-2xl text-slate-200 rounded-xl overflow-hidden;
+  }
+
+  .dji-input {
+    @apply bg-slate-950/50 border border-slate-700 text-slate-200 focus:border-emerald-500 rounded-md text-xs px-2 py-1.5 w-full outline-none transition-colors;
+  }
+
+  .dji-button {
+    @apply bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-emerald-500 transition-colors rounded-md px-3 py-1.5 text-xs font-medium flex items-center justify-center gap-1 shadow-sm;
+  }
+
+  .dji-button-primary {
+    @apply bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 transition-colors rounded-md px-3 py-1.5 text-xs font-medium flex items-center justify-center gap-1 shadow-sm shadow-emerald-900/20;
+  }
+
+  .dji-button-active {
+    @apply bg-emerald-900/40 text-emerald-400 border border-emerald-500;
+  }
+
+  .dji-button-danger {
+    @apply bg-rose-950/40 text-rose-400 hover:bg-rose-900/60 hover:text-rose-300 border border-rose-900/50 hover:border-rose-500/50 transition-colors rounded-md;
+  }
+
+  .plot-tooltip {
+    @apply bg-white rounded-lg shadow-lg p-3 text-sm;
+    border: none !important;
+  }
+
+  .plot-tooltip::before {
+    border-top-color: white !important;
+  }
 }
 
-/* Card Style */
-.agri-card {
-  @apply bg-white rounded-card shadow-card;
-}
+@layer utilities {
+  /* Scrollbar Hide Utility */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 
-/* Sidebar Active State */
-.sidebar-active {
-  @apply bg-white bg-opacity-20;
-}
+  /* Custom Scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-bg;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full hover:bg-text-muted transition-colors;
+  }
 
-/* Form Styles */
-.agri-label {
-  @apply text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-1 block;
-}
+  /* Mobile-friendly spacing */
+  @media (max-width: 640px) {
+    .agri-card {
+      @apply rounded-lg;
+    }
+  }
 
-.agri-input {
-  @apply w-full h-11 px-4 bg-white border border-border rounded-input text-sm text-text-primary focus:outline-none focus:border-primary transition-all placeholder:text-text-muted;
-}
-
-/* Farm Map Styles */
-.farm-map-container {
-  @apply overflow-hidden relative bg-[#0a0a0a];
-}
-
-.farm-map-container .leaflet-container {
-  height: 100%;
-  width: 100%;
-  z-index: 1;
-  background: #0a0a0a;
-}
-
-.dji-panel {
-  @apply bg-slate-900/90 backdrop-blur-md border border-slate-700/50 shadow-2xl text-slate-200 rounded-xl overflow-hidden;
-}
-
-.dji-input {
-  @apply bg-slate-950/50 border border-slate-700 text-slate-200 focus:border-emerald-500 rounded-md text-xs px-2 py-1.5 w-full outline-none transition-colors;
-}
-
-.dji-button {
-  @apply bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-emerald-500 transition-colors rounded-md px-3 py-1.5 text-xs font-medium flex items-center justify-center gap-1 shadow-sm;
-}
-
-.dji-button-primary {
-  @apply bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-500 transition-colors rounded-md px-3 py-1.5 text-xs font-medium flex items-center justify-center gap-1 shadow-sm shadow-emerald-900/20;
-}
-
-.dji-button-active {
-  @apply bg-emerald-900/40 text-emerald-400 border border-emerald-500;
-}
-
-.dji-button-danger {
-  @apply bg-rose-950/40 text-rose-400 hover:bg-rose-900/60 hover:text-rose-300 border border-rose-900/50 hover:border-rose-500/50 transition-colors rounded-md;
-}
-
-.plot-tooltip {
-  @apply bg-white rounded-lg shadow-lg p-3 text-sm;
-  border: none !important;
-}
-
-.plot-tooltip::before {
-  border-top-color: white !important;
+  /* PKR Formatting Class */
+  .font-pkr {
+    font-weight: 700;
+    @apply text-primary;
+  }
 }
 
