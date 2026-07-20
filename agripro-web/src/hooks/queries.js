@@ -64,7 +64,7 @@ export const useAcrePresets = (orgId) => {
   return useQuery({
     queryKey: ['acre_presets', orgId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('acre_presets').select('*').eq('org_id', orgId);
+      const { data, error } = await supabase.from('acre_presets').select('*').or(`org_id.eq.${orgId},org_id.is.null`);
       if (error) throw error;
       return data || [];
     },
