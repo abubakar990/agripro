@@ -257,6 +257,16 @@ const FarmMap = () => {
       alert("Redo failed: " + err.message);
     }
   }, [isDrawMode, redoStack, refetch]);
+  const cancelDraw = useCallback(() => {
+    setIsDrawMode(null);
+    setRedrawPlotId(null);
+    setSelectedPlotIdsForMerge([]);
+    setAdjustingPlotId(null);
+    setAdjustingFarmBoundary(false);
+    setDynamicAreaAcres(null);
+    if (mapRef.current) mapRef.current.pm.disableDraw();
+  }, []);
+
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -442,16 +452,6 @@ const FarmMap = () => {
     setIsDrawMode('acre_box');
     if (mapRef.current) mapRef.current.pm.disableDraw();
   };
-
-  const cancelDraw = useCallback(() => {
-    setIsDrawMode(null);
-    setRedrawPlotId(null);
-    setSelectedPlotIdsForMerge([]);
-    setAdjustingPlotId(null);
-    setAdjustingFarmBoundary(false);
-    setDynamicAreaAcres(null);
-    if (mapRef.current) mapRef.current.pm.disableDraw();
-  }, []);
 
   const handleFarmBoundaryCreated = useCallback(async (geojson, acres, lat, lng) => {
     setIsDrawMode(null);
