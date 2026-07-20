@@ -2,19 +2,15 @@ import React, { useMemo, useState } from 'react';
 import { IconPlus, IconBuildingBank, IconTrendingUp, IconTrendingDown, IconAlertCircle, IconTrash } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
 import { supabase } from '../../lib/supabase';
-import { calculateLoanInterest } from '../../utils/loanCalc';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 
 const LoanCard = ({ loan, farm, onRecordRepayment, refetch }) => {
   const [isDeleting, setIsDeleting] = useState(false);
-  // Always derive paid strictly from the loan_payments relation — the legacy
-  // loans.paid column has been removed as a second, driftable source of truth.
-  const paid = loan.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
-  const { totalInterest, totalPayable } = calculateLoanInterest(loan.principal, loan.interest_rate, loan.tenure_months);
-  const remaining = totalPayable - paid;
-  const progress = totalPayable > 0 ? (paid / totalPayable) * 100 : 0;
+  const paid = loan.payments?.reduce((sum, p) => sum + p.amount, 0) || loan.paid || 0;
+  const remaining = loan.principal - paid;
+  const progress = loan.principal > 0 ? (paid / loan.principal) * 100 : 0;
   const isOverdue = loan.due_date && new Date(loan.due_date) < new Date() && remaining > 0;
 
   const handleDelete = async () => {
@@ -74,26 +70,13 @@ const LoanCard = ({ loan, farm, onRecordRepayment, refetch }) => {
         <div className="grid grid-cols-2 gap-4 text-[11px]">
           <div>
             <span className="text-text-muted block uppercase font-bold">Interest Rate</span>
-            <span className="font-bold text-text-primary">{loan.interest_rate}% / yr</span>
+            <span className="font-bold text-text-primary">{loan.interest_rate}%</span>
           </div>
           <div className="text-right">
             <span className="text-text-muted block uppercase font-bold">Monthly Install.</span>
             <span className="font-bold text-text-primary">{formatPKR(loan.monthly_install)}</span>
           </div>
         </div>
-
-        {totalInterest > 0 && (
-          <div className="grid grid-cols-2 gap-4 text-[11px] pt-1 border-t border-border-light">
-            <div>
-              <span className="text-text-muted block uppercase font-bold">Interest (full tenure)</span>
-              <span className="font-bold text-accent-amber">{formatPKR(totalInterest)}</span>
-            </div>
-            <div className="text-right">
-              <span className="text-text-muted block uppercase font-bold">Total Payable</span>
-              <span className="font-bold text-text-primary">{formatPKR(totalPayable)}</span>
-            </div>
-          </div>
-        )}
 
         <div className="space-y-1">
           <div className="flex justify-between text-[11px] font-bold">
@@ -178,17 +161,15 @@ const Loans = () => {
 
   const stats = useMemo(() => {
     const totalBorrowed = loans.filter(l => l.type === 'Borrowed').reduce((s, l) => {
-      const paid = l.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
-      const { totalPayable } = calculateLoanInterest(l.principal, l.interest_rate, l.tenure_months);
-      return s + (totalPayable - paid);
+      const paid = l.payments?.reduce((sum, p) => sum + p.amount, 0) || l.paid || 0;
+      return s + (l.principal - paid);
     }, 0);
     const totalLent = loans.filter(l => l.type === 'Lent').reduce((s, l) => {
-      const paid = l.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
-      const { totalPayable } = calculateLoanInterest(l.principal, l.interest_rate, l.tenure_months);
-      return s + (totalPayable - paid);
+      const paid = l.payments?.reduce((sum, p) => sum + p.amount, 0) || l.paid || 0;
+      return s + (l.principal - paid);
     }, 0);
     const repaid = loans.filter(l => l.type === 'Borrowed').reduce((s, l) => {
-      const paid = l.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
+      const paid = l.payments?.reduce((sum, p) => sum + p.amount, 0) || l.paid || 0;
       return s + paid;
     }, 0);
     
@@ -208,7 +189,8 @@ const Loans = () => {
           principal: parseFloat(formData.principal) || 0,
           interest_rate: parseFloat(formData.interest_rate) || 0,
           tenure_months: parseInt(formData.tenure_months) || 0,
-          monthly_install: parseFloat(formData.monthly_install) || 0
+          monthly_install: parseFloat(formData.monthly_install) || 0,
+          paid: 0
         }]);
 
       if (error) throw error;
@@ -252,9 +234,8 @@ const Loans = () => {
 
     try {
       const amount = parseFloat(repaymentData.amount) || 0;
-
-      // loan_payments is the single source of truth for how much has been repaid —
-      // paid amounts are always derived from this table, never stored redundantly.
+      
+      // 1. Insert into loan_payments
       const { error: paymentError } = await supabase
         .from('loan_payments')
         .insert([{
@@ -266,6 +247,15 @@ const Loans = () => {
 
       if (paymentError) throw paymentError;
 
+      // 2. Update paid amount on loan table (legacy support)
+      const newPaidAmount = (selectedLoan.paid || 0) + amount;
+      const { error: updateError } = await supabase
+        .from('loans')
+        .update({ paid: newPaidAmount })
+        .eq('id', selectedLoan.id);
+
+      if (updateError) throw updateError;
+      
       await refetch();
       setIsRepaymentModalOpen(false);
       setSelectedLoan(null);
@@ -450,16 +440,6 @@ const Loans = () => {
               />
             </div>
           </div>
-          {(() => {
-            const { totalInterest, totalPayable } = calculateLoanInterest(formData.principal, formData.interest_rate, formData.tenure_months);
-            if (totalInterest <= 0) return null;
-            return (
-              <div className="flex justify-between text-[11px] font-bold bg-bg rounded-lg px-3 py-2">
-                <span className="text-text-muted">Interest over {formData.tenure_months} mo: {formatPKR(totalInterest)}</span>
-                <span className="text-text-primary">Total Payable: {formatPKR(totalPayable)}</span>
-              </div>
-            );
-          })()}
           <div className="flex gap-3 pt-2">
             <Button 
               type="button" 

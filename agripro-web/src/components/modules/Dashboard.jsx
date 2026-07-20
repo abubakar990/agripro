@@ -10,7 +10,6 @@ import {
   IconMilk 
 } from '@tabler/icons-react';
 import { formatPKR } from '../../utils/format';
-import { calculateLoanInterest } from '../../utils/loanCalc';
 import Badge from '../shared/Badge';
 
 const KpiCard = ({ title, value, icon: Icon, colorClass, trend }) => (
@@ -51,13 +50,8 @@ const Dashboard = () => {
     }, 0);
 
     const outstandingLoans = loans.reduce((sum, loan) => {
-      // loan_payments is the single source of truth for repayments (the legacy
-      // loans.paid column has been removed) — subtract it once, not twice.
-      // totalPayable includes accrued interest, matching the per-loan figures
-      // shown on the Loans page so the two screens never disagree.
       const payments = loan.payments?.reduce((pSum, p) => pSum + (parseFloat(p.amount) || 0), 0) || 0;
-      const { totalPayable } = calculateLoanInterest(loan.principal, loan.interest_rate, loan.tenure_months);
-      return sum + (totalPayable - payments);
+      return sum + (parseFloat(loan.principal) - parseFloat(loan.paid) - payments);
     }, 0);
 
     const assetValue = machinery.reduce((sum, m) => sum + (parseFloat(m.current_value) || 0), 0) + 

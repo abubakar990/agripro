@@ -193,23 +193,11 @@ const CropCycles = () => {
     return { active, totalRevenue };
   }, [cropCycles]);
 
-  const yieldByCrop = (() => {
-    const harvested = cropCycles.filter(c => c.status === 'Harvested' && c.act_yield_qty && c.area_acres && parseFloat(c.area_acres) > 0);
-    if (harvested.length === 0) return [];
-
-    // Group by crop + unit — averaging yield/acre across different crops (or
-    // different units, e.g. Maund vs KG) produces a number with no real meaning.
-    const groups = {};
-    harvested.forEach(c => {
-      const key = `${c.crop || 'Unknown'}__${c.yield_unit || ''}`;
-      if (!groups[key]) groups[key] = { crop: c.crop || 'Unknown', unit: c.yield_unit || '', total: 0, count: 0 };
-      groups[key].total += parseFloat(c.act_yield_qty) / parseFloat(c.area_acres);
-      groups[key].count += 1;
-    });
-
-    return Object.values(groups)
-      .map(g => ({ crop: g.crop, unit: g.unit, avgPerAcre: Math.round((g.total / g.count) * 10) / 10 }))
-      .sort((a, b) => a.crop.localeCompare(b.crop));
+  const avgYieldPerAcre = (() => {
+    const harvested = cropCycles.filter(c => c.status === 'Harvested' && c.act_yield_qty && c.area_acres);
+    if (harvested.length === 0) return null;
+    const total = harvested.reduce((sum, c) => sum + (c.area_acres && parseFloat(c.area_acres) > 0 ? c.act_yield_qty / parseFloat(c.area_acres) : 0), 0);
+    return (total / harvested.length).toFixed(1);
   })();
 
   if (isLoading) {
@@ -250,21 +238,12 @@ const CropCycles = () => {
         </div>
         <div className="agri-card p-5 border-l-4 border-accent-amber">
           <div className="flex justify-between items-start mb-2">
-            <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Avg Yield/Acre by Crop</span>
+            <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Avg Yield/Acre</span>
             <IconChartBar size={20} className="text-accent-amber" />
           </div>
-          {yieldByCrop.length > 0 ? (
-            <div className="space-y-0.5">
-              {yieldByCrop.map(g => (
-                <div key={g.crop + g.unit} className="flex justify-between text-sm font-bold text-text-primary">
-                  <span>{g.crop}</span>
-                  <span>{g.avgPerAcre} {g.unit}/Acre</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <span className="text-lg font-bold text-text-primary">No Data Yet</span>
-          )}
+          <span className="text-lg font-bold text-text-primary">
+            {avgYieldPerAcre !== null ? `${avgYieldPerAcre} / Acre` : 'Varies by Crop'}
+          </span>
         </div>
       </div>
 
