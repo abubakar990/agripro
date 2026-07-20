@@ -9,6 +9,7 @@ import Auth from './components/modules/Auth';
 import { useFarmFilter } from './hooks/useFarmFilter';
 import { useDateFilter } from './hooks/useDateFilter';
 import { useSupabaseData } from './hooks/useSupabaseData';
+import { useFarms, useCreditEntries } from './hooks/queries';
 import { IconPlant } from '@tabler/icons-react';
 
 const Dashboard = React.lazy(() => import('./components/modules/Dashboard'));
@@ -90,12 +91,18 @@ function App() {
   const { 
     organizations = [],
     currentOrg = null,
-    farms = [], 
-    creditEntries = [], 
+    farms: legacyFarms = [], 
+    creditEntries: legacyCredit = [], 
     isSystemAdmin = false,
     loading,
-    refetch
+    refetch: globalRefetch
   } = useSupabaseData(session, currentOrgId);
+
+  const { data: rqFarms } = useFarms(currentOrg?.id || currentOrgId);
+  const farms = rqFarms || legacyFarms;
+  const farmIds = farms.map(f => f.id);
+  const { data: rqCredit } = useCreditEntries(farmIds);
+  const creditEntries = rqCredit || legacyCredit;
 
   const handleOrgSwitch = (orgId) => {
     setCurrentOrgId(orgId);
@@ -201,8 +208,8 @@ function App() {
                   <Route path="/revenue" element={<Revenue user={session.user} />} />
                   <Route path="/farms" element={<Farms currentOrg={currentOrg} />} />
                   <Route path="/farm-map/:farmId" element={<FarmMap />} />
-                  <Route path="/billing" element={<Billing currentOrg={currentOrg} refetch={refetch} />} />
-                  <Route path="/settings" element={<OrgSettings currentOrg={currentOrg} user={session.user} refetch={refetch} />} />
+                  <Route path="/billing" element={<Billing currentOrg={currentOrg} refetch={globalRefetch} />} />
+                  <Route path="/settings" element={<OrgSettings currentOrg={currentOrg} user={session.user} refetch={globalRefetch} />} />
                   <Route path="/team" element={<TeamSettings currentOrg={currentOrg} user={session.user} farms={farms} />} />
                   {isSystemAdmin && <Route path="/admin" element={<AdminPanel />} />}
                   <Route path="/expenses" element={<Expenses user={session.user} />} />
