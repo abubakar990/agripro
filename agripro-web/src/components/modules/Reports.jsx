@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { IconFileDownload, IconPrinter, IconScale, IconReceipt, IconPackage, IconUsers } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
+import { calculateLoanInterest } from '../../utils/loanCalc';
 import Button from '../shared/Button';
 import * as XLSX from 'xlsx';
 
@@ -48,7 +49,10 @@ const Reports = () => {
 
     const loansReceivable = loans
       .filter(l => l.type === 'Lent')
-      .reduce((sum, l) => sum + (Number(l.principal) - getPaidAmount(l)), 0);
+      .reduce((sum, l) => {
+        const { totalPayable } = calculateLoanInterest(l.principal, l.interest_rate, l.tenure_months);
+        return sum + (totalPayable - getPaidAmount(l));
+      }, 0);
 
     const creditPayable = creditEntries
       .filter(e => e.type === 'Credit Purchase')
@@ -56,7 +60,10 @@ const Reports = () => {
 
     const loansPayable = loans
       .filter(l => l.type === 'Borrowed')
-      .reduce((sum, l) => sum + (Number(l.principal) - getPaidAmount(l)), 0);
+      .reduce((sum, l) => {
+        const { totalPayable } = calculateLoanInterest(l.principal, l.interest_rate, l.tenure_months);
+        return sum + (totalPayable - getPaidAmount(l));
+      }, 0);
 
     const machineryByCategory = machinery.reduce((acc, m) => {
       const cat = m.type || 'Uncategorized';
