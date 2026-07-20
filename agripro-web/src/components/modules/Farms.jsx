@@ -8,12 +8,16 @@ import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
 import { useFarms, useFarmPlots } from '../../hooks/queries';
-import { useFilteredData } from '../../hooks/useFilteredData';
+import { useGlobalStore } from '../../store/globalStore';
 
 const Farms = ({ currentOrg }) => {
   const currentOrgId = currentOrg?.id || localStorage.getItem('agripro_current_org_id');
   const { data: rawFarms = [], isLoading, refetch } = useFarms(currentOrgId);
-  const farms = useFilteredData(rawFarms);
+  const farmFilter = useGlobalStore(state => state.farmFilter);
+  const farms = React.useMemo(() => {
+    if (farmFilter === 'all') return rawFarms;
+    return rawFarms.filter(f => f.id === Number(farmFilter));
+  }, [rawFarms, farmFilter]);
   const farmIds = farms.map(f => f.id);
   const { data: farmPlots = [] } = useFarmPlots(farmIds);
   const navigate = useNavigate();
