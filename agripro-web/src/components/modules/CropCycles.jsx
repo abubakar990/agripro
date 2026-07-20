@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { IconPlus, IconPlant, IconCalendar, IconChartBar, IconTrendingUp, IconTrash, IconReceipt, IconEdit } from '@tabler/icons-react';
+import { IconPlus, IconPlant, IconCalendar, IconChartBar, IconTrendingUp, IconTrash, IconReceipt, IconEdit, IconSearch } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
@@ -24,6 +24,7 @@ const CropCycles = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [plotSearchTerm, setPlotSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     farm_id: farms.length > 0 ? farms[0].id : '',
     crop: '',
