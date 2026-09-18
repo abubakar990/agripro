@@ -1,4 +1,16 @@
--- AgriPro Full Database Schema (SaaS Multi-tenant)
+-- AgriPro Database Schema (SaaS Multi-tenant)
+--
+-- ⚠️  LEGACY SNAPSHOT — NOT THE SOURCE OF TRUTH.
+-- The live database has drifted well beyond this file. Production additionally contains tables
+-- (profiles, invitations, activity_logs, notifications, farm_plots, acre_presets, archive.*),
+-- columns (organization_members.is_system_admin, farm_access; organizations.subscription_expires_at),
+-- and numerous RPCs/policies NOT reflected here. Do NOT review security or reason about the DB
+-- from this file alone.
+--
+-- The source of truth going forward is the ordered migration files in supabase/migrations/.
+-- The 2026-07-25 migrations there harden: profiles PII exposure, org billing self-grant,
+-- mandi_prices open inserts, invitation role escalation, and SECURITY DEFINER execute grants.
+-- To regenerate a faithful full snapshot, run `supabase db dump` against the linked project.
 
 -- 5.1 Organizations
 CREATE TABLE IF NOT EXISTS organizations (
@@ -321,6 +333,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+CREATE OR REPLACE FUNCTION public.is_org_admin(_org_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.organization_members
+    WHERE org_id = _org_id 
+      AND user_id = auth.uid()
+      AND role IN ('owner', 'admin')
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 CREATE OR REPLACE FUNCTION public.has_farm_access(_farm_id INTEGER)
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -359,6 +383,10 @@ ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 -- Policies
 CREATE POLICY "Users can view their own organizations" ON organizations FOR SELECT USING (id IN (SELECT org_id FROM organization_members WHERE user_id = auth.uid()));
 CREATE POLICY "Users can view fellow members" ON organization_members FOR SELECT USING (org_id IN (SELECT org_id FROM organization_members WHERE user_id = auth.uid()));
+CREATE POLICY "Owners and admins can insert members" ON organization_members FOR INSERT WITH CHECK (public.is_org_admin(org_id));
+CREATE POLICY "Owners and admins can update members" ON organization_members FOR UPDATE USING (public.is_org_admin(org_id)) WITH CHECK (public.is_org_admin(org_id));
+CREATE POLICY "Owners and admins can delete members" ON organization_members FOR DELETE USING (public.is_org_admin(org_id));
+CREATE POLICY "Users can remove themselves" ON organization_members FOR DELETE USING (user_id = auth.uid());
 CREATE POLICY "Users can access farms in their organization" ON farms FOR ALL USING (public.is_org_member(org_id));
 CREATE POLICY "Org members can access revenue" ON revenue FOR ALL USING (public.has_farm_access(farm_id));
 CREATE POLICY "Org members can access expenses" ON expenses FOR ALL USING (public.has_farm_access(farm_id));
