@@ -1,4 +1,4 @@
-import { cashBalance, loansReceivable } from '../../src/utils/finance.js';
+import { cashBalance, loansReceivable, creditPayable, creditReceivable } from '../../src/utils/finance.js';
 
 export default function run(t) {
   // Sardargarh khata, 7 May 2026: Rs 500,000 amanat in, Rs 240,040 spent, Rs 30,000 lent to Rashid Ali.
@@ -20,4 +20,35 @@ export default function run(t) {
   t.equal(loansReceivable(withPayments), 25000, 'receivable is lent principal minus recoveries');
   t.equal(cashBalance({ revenue: [{ amount: '1000.50' }], expenses: [{ amount: 0.5 }] }), 1000, 'revenue minus expenses, string amounts handled');
   t.equal(cashBalance(), 0, 'no data = 0');
+
+  // Accrual: credit purchase is booked as an expense AND a payable; cash only drops when paid.
+  const creditEntries = [
+    { type: 'Credit Purchase', total_amount: 37500, payments: [] },                    // Ch Javaid
+    { type: 'Credit Purchase', total_amount: '21350.00', payments: [] },               // Naya Sawera
+    { type: 'Credit Sale', total_amount: 10000, payments: [{ amount: 4000 }] },
+  ];
+  t.equal(creditPayable(creditEntries), 58850, 'payable = unpaid credit purchases');
+  t.equal(creditReceivable(creditEntries), 6000, 'receivable = unpaid credit sales');
+  t.equal(
+    cashBalance({ expenses: [{ amount: 37500 }], creditEntries: [{ type: 'Credit Purchase', total_amount: 37500, payments: [] }] }),
+    0,
+    'an unpaid credit purchase does not reduce cash'
+  );
+  t.equal(
+    cashBalance({ expenses: [{ amount: 37500 }], creditEntries: [{ type: 'Credit Purchase', total_amount: 37500, payments: [{ amount: 10000 }] }] }),
+    -10000,
+    'paying the dealer reduces cash by the amount paid'
+  );
+
+  // Sardargarh 7–13 May: revenue 5,000; expenses 342,497; amanat 510,000; lent 30,000; credit owed 58,850.
+  t.equal(
+    cashBalance({
+      revenue: [{ amount: 5000 }],
+      expenses: [{ amount: 342497 }],
+      loans: [...loans, { type: 'Borrowed', principal: 5000 }, { type: 'Borrowed', principal: 5000 }],
+      creditEntries: creditEntries.slice(0, 2),
+    }),
+    201353,
+    'Sardargarh cash in hand after 13 May = 201,353'
+  );
 }

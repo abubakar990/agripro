@@ -12,7 +12,7 @@ import {
   IconCoins
 } from '@tabler/icons-react';
 import { formatPKR } from '../../utils/format';
-import { creditOutstanding, loanOutstanding, cashBalance, loansReceivable } from '../../utils/finance';
+import { creditOutstanding, loanOutstanding, cashBalance, loansReceivable, creditPayable } from '../../utils/finance';
 import Badge from '../shared/Badge';
 
 const KpiCard = ({ title, value, icon: Icon, colorClass, trend, hint }) => (
@@ -43,7 +43,7 @@ const Dashboard = () => {
   } = useFilteredDashboardData();
 
   const stats = useMemo(() => {
-    if (isLoading) return { totalRev: 0, totalExp: 0, netProfit: 0, creditReceivable: 0, outstandingLoans: 0, cash: 0, lentReceivable: 0, assetValue: 0, attendance: '0 / 0', livestockCount: 0 };
+    if (isLoading) return { totalRev: 0, totalExp: 0, netProfit: 0, creditReceivable: 0, creditPayable: 0, outstandingLoans: 0, cash: 0, lentReceivable: 0, assetValue: 0, attendance: '0 / 0', livestockCount: 0 };
     const totalRev = revenue.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
     const totalExp = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
     const netProfit = totalRev - totalExp;
@@ -70,7 +70,8 @@ const Dashboard = () => {
       netProfit,
       creditReceivable,
       outstandingLoans,
-      cash: cashBalance({ revenue: allRevenue, expenses: allExpenses, loans }),
+      creditPayable: creditPayable(creditEntries),
+      cash: cashBalance({ revenue: allRevenue, expenses: allExpenses, loans, creditEntries }),
       lentReceivable: loansReceivable(loans),
       assetValue,
       attendance: `${todayAttendance} / ${workers.length}`,
@@ -169,8 +170,8 @@ const Dashboard = () => {
         <KpiCard title="Total Revenue" value={formatPKR(stats.totalRev)} icon={IconTrendingUp} colorClass="border-revenue" />
         <KpiCard title="Total Expenses" value={formatPKR(stats.totalExp)} icon={IconTrendingDown} colorClass="border-expense" />
         <KpiCard title="Net Profit / Loss" value={formatPKR(stats.netProfit)} icon={IconScale} colorClass={stats.netProfit >= 0 ? "border-accent-blue" : "border-expense"} />
-        <KpiCard title="Credit Receivable" value={formatPKR(stats.creditReceivable)} icon={IconCreditCard} colorClass="border-accent-amber" />
-        <KpiCard title="Cash Balance" value={formatPKR(stats.cash)} icon={IconWallet} colorClass={stats.cash >= 0 ? "border-revenue" : "border-expense"} hint="All dates: revenue + loans taken − expenses − loans given" />
+        <KpiCard title="Credit Receivable" value={formatPKR(stats.creditReceivable)} icon={IconCreditCard} colorClass="border-accent-amber" hint={stats.creditPayable > 0 ? `You owe on credit: ${formatPKR(stats.creditPayable)}` : undefined} />
+        <KpiCard title="Cash Balance" value={formatPKR(stats.cash)} icon={IconWallet} colorClass={stats.cash >= 0 ? "border-revenue" : "border-expense"} hint="All dates. Unpaid credit purchases are not deducted until paid" />
         <KpiCard title="Outstanding Loans" value={formatPKR(stats.outstandingLoans)} icon={IconBuildingBank} colorClass="border-expense" />
         <KpiCard title="Money Lent" value={formatPKR(stats.lentReceivable)} icon={IconCoins} colorClass="border-accent-blue" hint="Still to recover from loans you gave" />
         <KpiCard title="Total Asset Value" value={formatPKR(stats.assetValue)} icon={IconEngine} colorClass="border-revenue" />

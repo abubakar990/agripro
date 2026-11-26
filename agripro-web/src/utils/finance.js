@@ -55,10 +55,14 @@ export { num as toNumber, round2 };
  *   revenue − expenses
  *   + loans taken (Borrowed principal) − repayments made on them
  *   − loans given (Lent principal)    + recoveries received on them
- * Credit Ledger entries are not included: they track receivables/payables, and
- * whether their cash is also entered as revenue/expense varies by user.
+ *   + unpaid Credit Purchases (payables) − unpaid Credit Sales (receivables)
+ *
+ * Accrual convention: a purchase/sale on credit is booked as an expense/revenue on
+ * the day it happens AND as a Credit Ledger entry for the amount still owed. The
+ * expense already subtracted the full amount, so the unpaid part is added back until
+ * it is actually paid (recording a payment in the Credit Ledger then reduces cash).
  */
-export function cashBalance({ revenue = [], expenses = [], loans = [] } = {}) {
+export function cashBalance({ revenue = [], expenses = [], loans = [], creditEntries = [] } = {}) {
   let cash = 0;
   for (const r of revenue) cash += num(r.amount);
   for (const e of expenses) cash -= num(e.amount);
@@ -66,7 +70,19 @@ export function cashBalance({ revenue = [], expenses = [], loans = [] } = {}) {
     if (l.type === 'Borrowed') cash += num(l.principal) - paidAmount(l);
     else if (l.type === 'Lent') cash -= num(l.principal) - paidAmount(l);
   }
+  cash += creditPayable(creditEntries);
+  cash -= creditReceivable(creditEntries);
   return round2(cash);
+}
+
+/** Still owed by us on Credit Purchases (dealer/shop udhaar). */
+export function creditPayable(entries = []) {
+  return round2(entries.filter(e => e.type === 'Credit Purchase').reduce((s, e) => s + creditOutstanding(e), 0));
+}
+
+/** Still owed to us on Credit Sales. */
+export function creditReceivable(entries = []) {
+  return round2(entries.filter(e => e.type === 'Credit Sale').reduce((s, e) => s + creditOutstanding(e), 0));
 }
 
 /** Money others still owe us on loans we gave (Lent). */
