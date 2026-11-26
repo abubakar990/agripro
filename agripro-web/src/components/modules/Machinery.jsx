@@ -1,10 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { IconPlus, IconTractor, IconEngine, IconGasStation, IconHistory, IconTrash, IconCoins, IconEdit } from '@tabler/icons-react';
 import { formatPKR, formatNumber } from '../../utils/format';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
+
+import { useMachinery, useMachineUsage, useCategories, useFarms } from '../../hooks/queries';
+import { useFilteredData, useFarmFilteredData } from '../../hooks/useFilteredData';
+import { useGlobalStore } from '../../store/globalStore';
+import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const MachineCard = ({ machine, farm, usage, onLogUsage, onEdit, onDelete }) => {
   const machineStats = useMemo(() => {
@@ -97,18 +103,15 @@ const MachineCard = ({ machine, farm, usage, onLogUsage, onEdit, onDelete }) => 
   );
 };
 
-import { useMachinery, useMachineUsage, useCategories, useFarms } from '../../hooks/queries';
-import { useFilteredData } from '../../hooks/useFilteredData';
-import { toast } from '../../utils/toast';
-import { confirmDialog } from '../../utils/confirmDialog';
-
 const Machinery = ({ user }) => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
   const { data: farms = [] } = useFarms(currentOrgId);
   const farmIds = farms.map(f => f.id);
+  const farmFilter = useGlobalStore(state => state.farmFilter);
 
   const { data: rawMachinery = [], isLoading: loadingMachinery, refetch: refetchMachinery } = useMachinery(farmIds);
-  const machinery = useFilteredData(rawMachinery);
+  // The machines you own are point-in-time; their usage log is period data.
+  const machinery = useFarmFilteredData(rawMachinery);
 
   const { data: rawUsage = [], isLoading: loadingUsage, refetch: refetchUsage } = useMachineUsage(farmIds);
   const machineUsage = useFilteredData(rawUsage);
@@ -125,7 +128,7 @@ const Machinery = ({ user }) => {
   const [customCategory, setCustomCategory] = useState('');
 
   const [formData, setFormData] = useState({
-    farm_id: farms.length > 0 ? farms[0].id : '',
+    farm_id: (farmFilter && farmFilter !== 'all') ? farmFilter : (farms[0]?.id || ''),
     name: '',
     type: categories.length > 0 ? categories[0].name : 'ADD_NEW',
     year: new Date().getFullYear(),
@@ -134,6 +137,15 @@ const Machinery = ({ user }) => {
     current_value: '',
     status: 'Active'
   });
+
+  useEffect(() => {
+    if (!formData.farm_id && farms.length > 0) {
+      const defaultFarm = (farmFilter && farmFilter !== 'all')
+        ? farmFilter
+        : farms[0].id;
+      setFormData(prev => ({ ...prev, farm_id: defaultFarm }));
+    }
+  }, [farms, farmFilter]);
 
   const [usageData, setUsageData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -192,28 +204,55 @@ const Machinery = ({ user }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitting(true);
 
+    if (farms.length === 0) {
+      toast.error('Please create a farm first before adding machinery');
+      return;
+    }
+
+    const targetFarmId = formData.farm_id
+      ? parseInt(formData.farm_id)
+      : (farmFilter && farmFilter !== 'all' ? parseInt(farmFilter) : (farms.length > 0 ? farms[0].id : null));
+
+    if (!targetFarmId || isNaN(targetFarmId)) {
+      toast.error('Please select a valid farm');
+      return;
+    }
+
+    if (!formData.name || !formData.name.trim()) {
+      toast.error('Please enter the machine name');
+      return;
+    }
+
+    setIsSubmitting(true);
     let finalType = formData.type;
     
     try {
       if (formData.type === 'ADD_NEW') {
+        if (!customCategory.trim()) {
+          toast.error('Please enter a new type name');
+          setIsSubmitting(false);
+          return;
+        }
         const { error: catError } = await supabase
           .from('categories')
-          .insert([{ 
-            name: customCategory, 
+          .insert([{
+            name: customCategory.trim(),
             module: 'machinery',
-            user_id: user?.id 
+            user_id: user?.id,
+            org_id: currentOrgId
           }]);
         
         if (catError && catError.code !== '23505') throw catError;
-        finalType = customCategory;
+        finalType = customCategory.trim();
       }
 
       const submissionData = {
         ...formData,
+        name: formData.name.trim(),
         type: finalType,
-        farm_id: parseInt(formData.farm_id),
+        farm_id: targetFarmId,
+        user_id: user?.id,
         year: formData.year ? parseInt(formData.year) : null,
         purchase_price: parseFloat(formData.purchase_price) || 0,
         current_value: parseFloat(formData.current_value) || 0
@@ -225,17 +264,22 @@ const Machinery = ({ user }) => {
           .update(submissionData)
           .eq('id', editingId);
         if (error) throw error;
+        toast.success('Machine updated successfully');
       } else {
         const { error } = await supabase.from('machinery').insert([submissionData]);
         if (error) throw error;
+        toast.success('Machine added successfully');
       }
       
       await refetchMachinery();
       setIsModalOpen(false);
       setEditingId(null);
       setCustomCategory('');
+      const defaultFarm = (farmFilter && farmFilter !== 'all')
+        ? farmFilter
+        : (farms.length > 0 ? farms[0].id : '');
       setFormData({
-        farm_id: farms.length > 0 ? farms[0].id : '',
+        farm_id: defaultFarm,
         name: '',
         type: categories.length > 0 ? categories[0].name : 'ADD_NEW',
         year: new Date().getFullYear(),
@@ -254,18 +298,31 @@ const Machinery = ({ user }) => {
 
   const handleUsageSubmit = async (e) => {
     e.preventDefault();
+
+    if (!selectedMachine?.id) {
+      toast.error('No machine selected');
+      return;
+    }
+    if (!selectedMachine?.farm_id) {
+      toast.error('Machine farm is invalid');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      const usageDate = usageData.date ? usageData.date : new Date().toISOString().split('T')[0];
       const { error } = await supabase.from('machine_usage').insert([{
         ...usageData,
+        date: usageDate,
         machine_id: selectedMachine.id,
         farm_id: selectedMachine.farm_id,
+        user_id: user?.id,
         hours: parseFloat(usageData.hours) || 0,
         fuel_litres: parseFloat(usageData.fuel_litres) || 0
       }]);
 
       if (error) throw error;
-      
+      toast.success('Machine usage logged successfully');
       await refetchUsage();
       setIsUsageModalOpen(false);
       setUsageData({
@@ -292,8 +349,11 @@ const Machinery = ({ user }) => {
   const openAddModal = () => {
     setEditingId(null);
     setCustomCategory('');
+    const defaultFarm = (farmFilter && farmFilter !== 'all')
+      ? farmFilter
+      : (farms.length > 0 ? farms[0].id : '');
     setFormData({
-      farm_id: farms.length > 0 ? farms[0].id : '',
+      farm_id: defaultFarm,
       name: '',
       type: categories.length > 0 ? categories[0].name : 'ADD_NEW',
       year: new Date().getFullYear(),
@@ -311,6 +371,7 @@ const Machinery = ({ user }) => {
     try {
       const { error } = await supabase.from('machinery').delete().eq('id', id);
       if (error) throw error;
+      toast.success('Machine deleted successfully');
       await refetchMachinery();
     } catch (error) {
       console.error('Error deleting machinery:', error);
@@ -463,6 +524,7 @@ const Machinery = ({ user }) => {
               <input
                 type="number"
                 step="0.1"
+                min="0"
                 name="hours"
                 value={usageData.hours}
                 onChange={handleUsageChange}
@@ -476,6 +538,7 @@ const Machinery = ({ user }) => {
               <input
                 type="number"
                 step="0.1"
+                min="0"
                 name="fuel_litres"
                 value={usageData.fuel_litres}
                 onChange={handleUsageChange}
@@ -556,11 +619,12 @@ const Machinery = ({ user }) => {
               <label className="text-xs font-bold text-text-muted uppercase">Farm</label>
               <select
                 name="farm_id"
-                value={formData.farm_id}
+                value={formData.farm_id || (farms.length > 0 ? farms[0].id : '')}
                 onChange={handleInputChange}
                 required
                 className="agri-input"
               >
+                {farms.length === 0 && <option value="">No farms available</option>}
                 {farms.map(farm => (
                   <option key={farm.id} value={farm.id}>{farm.name}</option>
                 ))}
@@ -630,6 +694,7 @@ const Machinery = ({ user }) => {
                 name="purchase_price"
                 value={formData.purchase_price}
                 onChange={handleInputChange}
+                min="0"
                 placeholder="0.00"
                 className="agri-input"
               />
@@ -641,6 +706,7 @@ const Machinery = ({ user }) => {
                 name="current_value"
                 value={formData.current_value}
                 onChange={handleInputChange}
+                min="0"
                 placeholder="0.00"
                 className="agri-input"
               />
@@ -667,7 +733,7 @@ const Machinery = ({ user }) => {
             <Button 
               type="button" 
               variant="outline" 
-              className="flex-1"
+              className="flex-1" 
               onClick={() => setIsModalOpen(false)}
             >
               Cancel
@@ -676,7 +742,7 @@ const Machinery = ({ user }) => {
               type="submit" 
               variant="primary" 
               className="flex-1"
-              disabled={isSubmitting}
+              disabled={isSubmitting || farms.length === 0}
             >
               {isSubmitting ? 'Saving...' : 'Save Machine'}
             </Button>
@@ -688,4 +754,3 @@ const Machinery = ({ user }) => {
 };
 
 export default Machinery;
-

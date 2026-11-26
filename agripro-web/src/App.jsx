@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
@@ -68,10 +68,6 @@ function App() {
   const [currentOrgId, setCurrentOrgId] = useState(localStorage.getItem('agripro_current_org_id'));
 
   useEffect(() => {
-    setIsMobileSidebarOpen(false);
-  }, []);
-
-  useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setIsSessionLoading(false);
@@ -111,8 +107,19 @@ function App() {
     localStorage.setItem('agripro_current_org_id', orgId);
   };
 
-  const { farmFilter, setFarmFilter, filteredData, currentFarmName } = useFarmFilter(farms);
-  const { dateRange, setDateRange, customRange, setCustomRange, filterByDate } = useDateFilter();
+  const { farmFilter, setFarmFilter, currentFarmName } = useFarmFilter(farms);
+  const { dateRange, setDateRange, customRange, setCustomRange } = useDateFilter();
+
+  // ToastContainer / ConfirmContainer listen for window events and must be mounted on EVERY
+  // screen, including the signed-out ones. They used to live only in the authenticated tree
+  // below, so toast() calls from the Auth screen — notably "Check your email for the
+  // confirmation link" after sign-up — dispatched into the void and signup looked dead.
+  const overlays = (
+    <>
+      <ToastContainer />
+      <ConfirmContainer />
+    </>
+  );
 
   if (isSessionLoading) {
     return (
@@ -126,7 +133,8 @@ function App() {
     if (showAuth) {
       return (
         <div className="relative">
-          <button 
+          {overlays}
+          <button
             onClick={() => setShowAuth(false)}
             className="absolute top-8 left-8 text-primary font-bold flex items-center gap-2 hover:underline z-50"
           >
@@ -137,7 +145,12 @@ function App() {
         </div>
       );
     }
-    return <LandingPage onGetStarted={() => setShowAuth(true)} />;
+    return (
+      <>
+        {overlays}
+        <LandingPage onGetStarted={() => setShowAuth(true)} />
+      </>
+    );
   }
 
   if (loading) {
@@ -150,8 +163,7 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <ToastContainer />
-      <ConfirmContainer />
+      {overlays}
       <Router>
         <div className="flex min-h-screen bg-bg relative">
           {isMobileSidebarOpen && (

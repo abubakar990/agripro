@@ -134,7 +134,7 @@ export const addPolygonToFeatureCollection = (existingGeoJSON, newPolygonGeoJSON
       features = [turf.feature(existingGeoJSON), newFeature];
     }
     return turf.featureCollection(features);
-  } catch (e) {
+  } catch {
     return turf.featureCollection([newFeature]);
   }
 };
@@ -205,7 +205,7 @@ export const autoGeneratePlotsForBoundary = (farmBoundaryGeoJSON, lengthFt, widt
                   }
                 }
               }
-            } catch (err) {
+            } catch {
               // Ignore topological errors for this specific box and continue
             }
           }
@@ -305,7 +305,7 @@ export const rotatePolygon = (geoJSON, angle = 90) => {
   try {
      const center = getPolygonCenter(geoJSONToLatLngs(geoJSON)[0]);
      return transformRotate(geoJSON, angle, { pivot: [center[1], center[0]] }).geometry;
-  } catch(e) {
+  } catch {
      return geoJSON;
   }
 };
@@ -323,7 +323,7 @@ export const mergePolygons = (geoJSONs) => {
       const f2 = turf.feature(geoJSONs[i]);
       try {
         merged = union(turf.featureCollection([merged, f2]));
-      } catch (err) {
+      } catch {
         console.warn("Union precision error, truncating geometries...");
         const t1 = truncate(merged, { precision: 6 });
         const t2 = truncate(f2, { precision: 6 });
@@ -348,7 +348,7 @@ export const getOverlapArea = (geoJSON1, geoJSON2) => {
     const intersection = intersect(turf.featureCollection([f1, f2]));
     if (!intersection) return 0;
     return area(intersection);
-  } catch (e) {
+  } catch {
     return 0;
   }
 };

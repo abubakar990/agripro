@@ -71,14 +71,26 @@ const Farms = ({ currentOrg }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const effectiveOrgId = currentOrg?.id || currentOrgId;
+    if (!effectiveOrgId) {
+      toast.error('Organization ID not found. Please re-select your organization.');
+      return;
+    }
+
+    if (!formData.name || !formData.name.trim()) {
+      toast.error('Please enter a farm name');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       if (editingFarm) {
         const { error } = await supabase
           .from('farms')
           .update({
-            name: formData.name,
-            location: formData.location,
+            name: formData.name.trim(),
+            location: formData.location ? formData.location.trim() : '',
             ownership: formData.ownership,
             status: formData.status,
             area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
@@ -86,17 +98,19 @@ const Farms = ({ currentOrg }) => {
           })
           .eq('id', editingFarm.id);
         if (error) throw error;
+        toast.success('Farm updated successfully');
       } else {
         const { error } = await supabase.from('farms').insert([{
-          name: formData.name,
-          location: formData.location,
+          name: formData.name.trim(),
+          location: formData.location ? formData.location.trim() : '',
           ownership: formData.ownership,
           status: formData.status,
-          org_id: currentOrg?.id,
+          org_id: effectiveOrgId,
           area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
           land_value: parseFloat(formData.land_value) || 0
         }]);
         if (error) throw error;
+        toast.success('Farm created successfully');
       }
       
       await refetch();
@@ -125,6 +139,7 @@ const Farms = ({ currentOrg }) => {
     try {
       const { error } = await supabase.from('farms').delete().eq('id', id);
       if (error) throw error;
+      toast.success('Farm deleted successfully');
       await refetch();
     } catch (error) {
       console.error('Error deleting farm:', error);
@@ -346,6 +361,7 @@ const Farms = ({ currentOrg }) => {
                 name="land_value"
                 value={formData.land_value}
                 onChange={handleInputChange}
+                min="0"
                 placeholder="0.00"
                 className="agri-input"
               />
@@ -370,7 +386,7 @@ const Farms = ({ currentOrg }) => {
             <Button 
               type="button" 
               variant="outline" 
-              className="flex-1"
+              className="flex-1" 
               onClick={() => setIsModalOpen(false)}
             >
               Cancel

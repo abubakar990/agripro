@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { IconCheck, IconX, IconInfoCircle } from '@tabler/icons-react';
 
 export default function ToastContainer() {
@@ -26,7 +26,7 @@ export default function ToastContainer() {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2" role="status" aria-live="polite">
       {toasts.map((toast) => (
         <div
           key={toast.id}
@@ -40,7 +40,7 @@ export default function ToastContainer() {
           
           <span className="font-medium">{toast.message}</span>
           
-          <button onClick={() => removeToast(toast.id)} className="ml-4 hover:opacity-80">
+          <button onClick={() => removeToast(toast.id)} aria-label="Dismiss notification" className="ml-4 hover:opacity-80">
             <IconX size={16} />
           </button>
         </div>

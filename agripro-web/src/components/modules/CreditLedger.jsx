@@ -1,18 +1,25 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { IconPlus, IconCreditCard, IconClock, IconChecks, IconAlertCircle, IconTrash } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
+import { paidAmount, creditOutstanding, toNumber as num } from '../../utils/finance';
 import { supabase } from '../../lib/supabase';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
+import { useCreditEntries, useFarms } from '../../hooks/queries';
+import { useFarmFilteredData } from '../../hooks/useFilteredData';
+import { useGlobalStore } from '../../store/globalStore';
+import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory, refetch }) => {
   const [isDeleting, setIsDeleting] = useState(false);
-  const paid = entry.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
-  const remaining = entry.total_amount - (entry.advance || 0) - paid;
-  const progress = entry.total_amount > 0 ? (( (entry.advance || 0) + paid) / entry.total_amount) * 100 : 0;
+  const paid = paidAmount(entry);
+  const remaining = creditOutstanding(entry);
+  const total = num(entry.total_amount);
+  const progress = total > 0 ? Math.min(100, (paid / total) * 100) : 0;
   
-  const isOverdue = new Date(entry.due_date) < new Date() && remaining > 0;
+  const isOverdue = entry.due_date && new Date(entry.due_date) < new Date() && remaining > 0;
 
   const handleDelete = async () => {
     if (!await confirmDialog(`Are you sure you want to delete credit entry for ${entry.party}?`)) return;
@@ -25,6 +32,7 @@ const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory, refetch }) =>
         .eq('id', entry.id);
       
       if (error) throw error;
+      toast.success('Credit entry deleted');
       await refetch();
     } catch (error) {
       console.error('Error deleting credit entry:', error.message);
@@ -49,6 +57,7 @@ const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory, refetch }) =>
             onClick={handleDelete}
             disabled={isDeleting}
             className="text-error hover:bg-error/10 p-1 rounded transition-colors disabled:opacity-50"
+            title="Delete Entry"
           >
             <IconTrash size={16} />
           </button>
@@ -69,7 +78,7 @@ const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory, refetch }) =>
 
         <div className="space-y-1">
           <div className="flex justify-between text-[11px] font-bold">
-            <span className="text-text-muted">Paid: {formatPKR((entry.advance || 0) + paid)}</span>
+            <span className="text-text-muted">Paid: {formatPKR(paid)}</span>
             <span className={remaining > 0 ? 'text-expense' : 'text-revenue'}>
               {remaining > 0 ? `Remaining: ${formatPKR(remaining)}` : 'Fully Settled'}
             </span>
@@ -85,7 +94,7 @@ const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory, refetch }) =>
         <div className="flex justify-between items-center text-[11px]">
           <div className="flex items-center gap-1 text-text-muted">
             <IconClock size={14} />
-            <span>Due: {formatDate(entry.due_date)}</span>
+            <span>Due: {entry.due_date ? formatDate(entry.due_date) : 'No Due Date'}</span>
           </div>
           {isOverdue && (
             <div className="flex items-center gap-1 text-expense font-bold animate-pulse">
@@ -126,26 +135,31 @@ const CreditCard = ({ entry, farm, onRecordPayment, onViewHistory, refetch }) =>
   );
 };
 
-import { useCreditEntries, useFarms } from '../../hooks/queries';
-import { useFilteredData } from '../../hooks/useFilteredData';
-import { toast } from '../../utils/toast';
-import { confirmDialog } from '../../utils/confirmDialog';
-
 const CreditLedger = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const farmFilter = useGlobalStore(state => state.farmFilter);
   const { data: farms = [] } = useFarms(currentOrgId);
   const farmIds = farms.map(f => f.id);
   
   const { data: rawCreditEntries = [], isLoading, refetch } = useCreditEntries(farmIds);
-  const creditEntries = useFilteredData(rawCreditEntries);
+  // Outstanding balances are point-in-time: filtering by origination date would hide
+  // older unpaid entries and understate what is still receivable/payable.
+  const creditEntries = useFarmFilteredData(rawCreditEntries);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState(null);
+
+  const getInitialFarmId = () => {
+    if (farmFilter !== 'all' && farms.some(f => String(f.id) === String(farmFilter))) {
+      return Number(farmFilter);
+    }
+    return farms[0]?.id || '';
+  };
   
   const [formData, setFormData] = useState({
-    farm_id: farms[0]?.id || '',
+    farm_id: getInitialFarmId(),
     date: new Date().toISOString().split('T')[0],
     type: 'Credit Sale',
     party: '',
@@ -156,6 +170,16 @@ const CreditLedger = () => {
     note: ''
   });
 
+  // Sync default farm_id when farms finish loading
+  useEffect(() => {
+    if (farms.length > 0 && !formData.farm_id) {
+      setFormData(prev => ({
+        ...prev,
+        farm_id: getInitialFarmId()
+      }));
+    }
+  }, [farms, farmFilter]);
+
   const [paymentData, setPaymentData] = useState({
     date: new Date().toISOString().split('T')[0],
     amount: '',
@@ -165,49 +189,85 @@ const CreditLedger = () => {
   const stats = useMemo(() => {
     const receivable = creditEntries
       .filter(e => e.type === 'Credit Sale')
-      .reduce((sum, e) => sum + (e.total_amount - (e.advance || 0) - (e.payments?.reduce((s, p) => s + p.amount, 0) || 0)), 0);
-    
+      .reduce((sum, e) => sum + creditOutstanding(e), 0);
+
     const payable = creditEntries
       .filter(e => e.type === 'Credit Purchase')
-      .reduce((sum, e) => sum + (e.total_amount - (e.advance || 0) - (e.payments?.reduce((s, p) => s + p.amount, 0) || 0)), 0);
+      .reduce((sum, e) => sum + creditOutstanding(e), 0);
 
-    const overdueCount = creditEntries.filter(e => {
-      const remaining = e.total_amount - (e.advance || 0) - (e.payments?.reduce((s, p) => s + p.amount, 0) || 0);
-      return new Date(e.due_date) < new Date() && remaining > 0;
-    }).length;
+    const overdueCount = creditEntries.filter(e => (
+      e.due_date && new Date(e.due_date) < new Date() && creditOutstanding(e) > 0
+    )).length;
 
     return { receivable, payable, overdueCount };
   }, [creditEntries]);
+
+  const openAddModal = () => {
+    setFormData({
+      farm_id: getInitialFarmId(),
+      date: new Date().toISOString().split('T')[0],
+      type: 'Credit Sale',
+      party: '',
+      item: '',
+      total_amount: '',
+      advance: '0',
+      due_date: '',
+      note: ''
+    });
+    setIsModalOpen(true);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
+      const targetFarmId = formData.farm_id 
+        ? parseInt(formData.farm_id) 
+        : (farms.length > 0 ? farms[0].id : null);
+
+      if (!targetFarmId || isNaN(targetFarmId)) {
+        toast.error('Please select a valid farm. Create a farm first if none exist.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const totalAmount = parseFloat(formData.total_amount);
+      if (isNaN(totalAmount) || totalAmount <= 0) {
+        toast.error('Please enter a valid total amount.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUserId = authData?.user?.id || null;
+
+      const payload = {
+        farm_id: targetFarmId,
+        date: formData.date || new Date().toISOString().split('T')[0],
+        type: formData.type || 'Credit Sale',
+        party: formData.party?.trim() || '',
+        item: formData.item?.trim() || '',
+        total_amount: totalAmount,
+        advance: parseFloat(formData.advance) || 0,
+        due_date: formData.due_date ? formData.due_date : null,
+        note: formData.note ? formData.note.trim() : null
+      };
+
+      if (currentUserId) {
+        payload.user_id = currentUserId;
+      }
+
       const { error } = await supabase
         .from('credit_entries')
-        .insert([{
-          ...formData,
-          farm_id: parseInt(formData.farm_id),
-          total_amount: parseFloat(formData.total_amount) || 0,
-          advance: parseFloat(formData.advance) || 0
-        }]);
+        .insert([payload]);
 
       if (error) throw error;
       
+      toast.success('Credit entry added successfully');
       await refetch();
       setIsModalOpen(false);
-      setFormData({
-        farm_id: farms[0]?.id || '',
-        date: new Date().toISOString().split('T')[0],
-        type: 'Credit Sale',
-        party: '',
-        item: '',
-        total_amount: '',
-        advance: '0',
-        due_date: '',
-        note: ''
-      });
+      openAddModal();
     } catch (error) {
       console.error('Error adding credit entry:', error.message);
       toast.error('Error adding entry: ' + error.message);
@@ -231,17 +291,34 @@ const CreditLedger = () => {
     setIsSubmitting(true);
 
     try {
+      const amount = parseFloat(paymentData.amount) || 0;
+      if (amount <= 0) {
+        toast.error('Please enter a valid payment amount.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUserId = authData?.user?.id || null;
+
+      const paymentPayload = {
+        credit_entry_id: selectedEntry.id,
+        date: paymentData.date,
+        amount: amount,
+        note: paymentData.note ? paymentData.note.trim() : null
+      };
+
+      if (currentUserId) {
+        paymentPayload.user_id = currentUserId;
+      }
+
       const { error } = await supabase
         .from('credit_payments')
-        .insert([{
-          credit_entry_id: selectedEntry.id,
-          date: paymentData.date,
-          amount: parseFloat(paymentData.amount) || 0,
-          note: paymentData.note
-        }]);
+        .insert([paymentPayload]);
 
       if (error) throw error;
       
+      toast.success('Payment recorded successfully');
       await refetch();
       setIsPaymentModalOpen(false);
       setSelectedEntry(null);
@@ -273,7 +350,7 @@ const CreditLedger = () => {
           <h2 className="text-xl font-bold text-text-primary">Credit Ledger</h2>
           <p className="text-sm text-text-muted">Manage buying and selling on credit.</p>
         </div>
-        <Button variant="primary" onClick={() => setIsModalOpen(true)}>
+        <Button variant="primary" onClick={openAddModal}>
           <IconPlus size={18} />
           New Credit Entry
         </Button>
@@ -296,74 +373,31 @@ const CreditLedger = () => {
         </div>
         <div className="agri-card p-5 border-l-4 border-accent-amber">
           <div className="flex justify-between items-start mb-2">
-            <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Overdue Entries</span>
-            <IconAlertCircle size={20} className="text-accent-amber" />
+            <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Overdue Invoices</span>
+            <IconClock size={20} className="text-accent-amber" />
           </div>
-          <span className="text-lg font-bold text-accent-amber">{stats.overdueCount} Alerts</span>
+          <span className="text-lg font-bold text-accent-amber">{stats.overdueCount}</span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {creditEntries.map(entry => (
-          <CreditCard 
-            key={entry.id} 
-            entry={entry} 
-            farm={farms.find(f => f.id === entry.farm_id)} 
-            onRecordPayment={handleRecordPayment}
-            onViewHistory={handleViewHistory}
-            refetch={refetch}
-          />
-        ))}
+        {creditEntries.length > 0 ? (
+          creditEntries.map(entry => (
+            <CreditCard 
+              key={entry.id} 
+              entry={entry} 
+              farm={farms.find(f => f.id === entry.farm_id)}
+              onRecordPayment={handleRecordPayment}
+              onViewHistory={handleViewHistory}
+              refetch={refetch}
+            />
+          ))
+        ) : (
+          <div className="col-span-full py-10 agri-card text-center opacity-40">
+            <p className="text-sm font-bold">No credit entries recorded yet.</p>
+          </div>
+        )}
       </div>
-
-      {/* History Modal */}
-      <Modal
-        isOpen={isHistoryModalOpen}
-        onClose={() => setIsHistoryModalOpen(false)}
-        title={`Payment History: ${selectedEntry?.party}`}
-      >
-        <div className="space-y-4">
-          <div className="bg-bg p-4 rounded-lg">
-            <div className="flex justify-between text-xs mb-1">
-              <span className="text-text-muted">Total Amount:</span>
-              <span className="font-bold">{formatPKR(selectedEntry?.total_amount)}</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-text-muted">Advance:</span>
-              <span className="font-bold text-revenue">{formatPKR(selectedEntry?.advance)}</span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <h4 className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Installments / Payments</h4>
-            {selectedEntry?.payments && selectedEntry.payments.length > 0 ? (
-              <div className="divide-y divide-border border rounded-lg overflow-hidden bg-white">
-                {selectedEntry.payments.map((p, idx) => (
-                  <div key={idx} className="p-3 flex justify-between items-center">
-                    <div>
-                      <p className="text-[13px] font-bold text-text-primary">{formatPKR(p.amount)}</p>
-                      <p className="text-[10px] text-text-muted">{formatDate(p.date)}</p>
-                    </div>
-                    {p.note && <p className="text-[10px] italic text-text-secondary max-w-[150px] truncate">{p.note}</p>}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="py-8 text-center bg-white rounded-lg border border-dashed border-border">
-                <p className="text-xs text-text-muted italic">No payment records found.</p>
-              </div>
-            )}
-          </div>
-
-          <Button 
-            variant="outline" 
-            className="w-full" 
-            onClick={() => setIsHistoryModalOpen(false)}
-          >
-            Close
-          </Button>
-        </div>
-      </Modal>
 
       <Modal 
         isOpen={isModalOpen} 
@@ -376,11 +410,15 @@ const CreditLedger = () => {
               <label className="agri-label">Select Farm</label>
               <select 
                 className="agri-input"
-                value={formData.farm_id}
+                value={formData.farm_id || (farms[0]?.id ?? '')}
                 onChange={e => setFormData({...formData, farm_id: e.target.value})}
                 required
               >
-                {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                {farms.length === 0 ? (
+                  <option value="">No farms available</option>
+                ) : (
+                  farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)
+                )}
               </select>
             </div>
             <div>
@@ -445,14 +483,13 @@ const CreditLedger = () => {
                 onChange={e => setFormData({...formData, advance: e.target.value})}
               />
             </div>
-            <div>
-              <label className="agri-label">Due Date</label>
+            <div className="col-span-2">
+              <label className="agri-label">Due Date (Optional)</label>
               <input 
                 type="date" 
                 className="agri-input"
                 value={formData.due_date}
                 onChange={e => setFormData({...formData, due_date: e.target.value})}
-                required
               />
             </div>
             <div className="col-span-2">
@@ -460,11 +497,17 @@ const CreditLedger = () => {
               <textarea 
                 className="agri-input" 
                 rows="2"
+                placeholder="Additional details, terms..."
                 value={formData.note}
                 onChange={e => setFormData({...formData, note: e.target.value})}
               ></textarea>
             </div>
           </div>
+          {farms.length === 0 && (
+            <p className="text-xs text-error font-medium">
+              Please add at least one farm before recording a credit entry.
+            </p>
+          )}
           <div className="flex gap-3 pt-2">
             <Button 
               type="button" 
@@ -478,7 +521,7 @@ const CreditLedger = () => {
               type="submit" 
               variant="primary" 
               className="flex-1"
-              disabled={isSubmitting}
+              disabled={isSubmitting || farms.length === 0}
             >
               {isSubmitting ? 'Adding...' : 'Save Entry'}
             </Button>
@@ -542,6 +585,57 @@ const CreditLedger = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Payment History Modal */}
+      <Modal
+        isOpen={isHistoryModalOpen}
+        onClose={() => { setIsHistoryModalOpen(false); setSelectedEntry(null); }}
+        title={`Payment History - ${selectedEntry?.party}`}
+      >
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-bg p-3 rounded-lg text-sm">
+            <div>
+              <span className="text-text-muted text-xs block">Total Amount</span>
+              <span className="font-bold">{selectedEntry ? formatPKR(selectedEntry.total_amount) : 0}</span>
+            </div>
+            <div>
+              <span className="text-text-muted text-xs block">Advance Paid</span>
+              <span className="font-bold">{selectedEntry ? formatPKR(selectedEntry.advance) : 0}</span>
+            </div>
+            <div>
+              <span className="text-text-muted text-xs block">Remaining</span>
+              <span className="font-bold text-expense">{selectedEntry ? formatPKR(creditOutstanding(selectedEntry)) : 0}</span>
+            </div>
+          </div>
+
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {selectedEntry?.payments && selectedEntry.payments.length > 0 ? (
+              selectedEntry.payments.map((p, idx) => (
+                <div key={p.id || idx} className="flex justify-between items-center p-2 border-b border-border text-sm">
+                  <div>
+                    <span className="font-medium text-text-primary">{formatDate(p.date)}</span>
+                    {p.note && <span className="text-xs text-text-muted block">{p.note}</span>}
+                  </div>
+                  <span className="font-bold text-revenue">+{formatPKR(p.amount)}</span>
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-sm text-text-muted py-4">No payments recorded yet.</p>
+            )}
+          </div>
+
+          <div className="pt-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="w-full" 
+              onClick={() => { setIsHistoryModalOpen(false); setSelectedEntry(null); }}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

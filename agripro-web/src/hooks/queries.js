@@ -1,20 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 
-// Fetch organizations for the user
-export const useOrganizations = () => {
-  return useQuery({
-    queryKey: ['organizations'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('*, organization_members(*)');
-      if (error) throw error;
-      return data || [];
-    }
-  });
-};
-
 // Generic hook to fetch module data for given farms
 export const useFarmModuleData = (table, farmIds, options = {}) => {
   const { orderBy = 'id', ascending = false, limit = null, select = '*' } = options;

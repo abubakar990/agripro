@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   IconUserPlus, 
   IconMail, 
@@ -149,7 +149,7 @@ const TeamSettings = ({ currentOrg, user, farms = [] }) => {
     }
   };
 
-  const removeMember = async (memberId, memberUserId) => {
+  const removeMember = async (memberId) => {
     if (!await confirmDialog('Are you sure you want to remove this member?')) return;
     
     try {
@@ -164,7 +164,7 @@ const TeamSettings = ({ currentOrg, user, farms = [] }) => {
     }
   };
 
-  const cancelInvite = async (inviteId, inviteEmail) => {
+  const cancelInvite = async (inviteId) => {
     if (!await confirmDialog('Cancel this invitation?')) return;
     
     try {
@@ -318,8 +318,10 @@ const TeamSettings = ({ currentOrg, user, farms = [] }) => {
                   </td>
                   <td className="px-6 py-4 text-right">
                     {isOwner && member.user_id !== user.id && (
-                      <button 
+                      <button
                         onClick={() => removeMember(member.id, member.user_id)}
+                        aria-label="Remove member"
+                        title="Remove member"
                         className="text-text-muted hover:text-expense p-2 rounded-full transition-colors"
                       >
                         <IconTrash size={18} />
@@ -367,10 +369,11 @@ const TeamSettings = ({ currentOrg, user, farms = [] }) => {
                     </td>
                     <td className="px-6 py-4 text-right">
                       {isOwner && (
-                        <button 
+                        <button
                           onClick={() => cancelInvite(invite.id, invite.email)}
                           className="text-text-muted hover:text-expense p-2 rounded-full transition-colors"
                           title="Cancel Invite"
+                          aria-label="Cancel invite"
                         >
                           <IconTrash size={18} />
                         </button>
@@ -391,10 +394,11 @@ const TeamSettings = ({ currentOrg, user, farms = [] }) => {
       >
         <form onSubmit={handleInvite} className="space-y-4">
           <div className="flex flex-col gap-1">
-            <label className="agri-label">Email Address</label>
+            <label htmlFor="invite-email" className="agri-label">Email Address</label>
             <div className="relative">
               <IconMail className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
               <input
+                id="invite-email"
                 type="email"
                 required
                 className="agri-input pl-10"
@@ -407,8 +411,9 @@ const TeamSettings = ({ currentOrg, user, farms = [] }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
-              <label className="agri-label">Role</label>
-              <select 
+              <label htmlFor="invite-role" className="agri-label">Role</label>
+              <select
+                id="invite-role"
                 className="agri-input"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
@@ -418,8 +423,9 @@ const TeamSettings = ({ currentOrg, user, farms = [] }) => {
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="agri-label">Farm Access</label>
-              <select 
+              <label htmlFor="invite-access" className="agri-label">Farm Access</label>
+              <select
+                id="invite-access"
                 className="agri-input"
                 value={accessType}
                 onChange={(e) => setAccessType(e.target.value)}

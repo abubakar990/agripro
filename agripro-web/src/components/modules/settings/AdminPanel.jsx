@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { IconShieldLock, IconUsers, IconBuildingCommunity, IconCircleCheck, IconCircleX, IconLoader2, IconSearch } from '@tabler/icons-react';
+import { useState, useEffect } from 'react';
+import { IconShieldLock, IconUsers, IconCircleCheck, IconCircleX, IconLoader2, IconSearch } from '@tabler/icons-react';
 import Button from '../../shared/Button';
 import Badge from '../../shared/Badge';
+import Modal from '../../shared/Modal';
 import { supabase } from '../../../lib/supabase';
 import { toast } from '../../../utils/toast';
 
@@ -10,6 +11,8 @@ const AdminPanel = () => {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
   const [searchTerm, setSearchSearchTerm] = useState('');
+  const [proModalOrg, setProModalOrg] = useState(null);
+  const [proMonths, setProMonths] = useState('1');
 
   const fetchAllOrgs = async () => {
     setLoading(true);
@@ -32,30 +35,22 @@ const AdminPanel = () => {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount
     fetchAllOrgs();
   }, []);
 
-  const toggleTier = async (orgId, currentTier) => {
-    let months = 1;
-    let newTier = 'free';
-    
-    if (currentTier !== 'pro') {
-      const input = window.prompt('How many months of Pro access? (Enter a number)', '1');
-      if (input === null) return; // Cancelled
-      months = parseInt(input) || 1;
-      newTier = 'pro';
-    }
-
+  const applyTierChange = async (orgId, newTier, months = 1) => {
     setUpdatingId(orgId);
-    
-    const expiryDate = newTier === 'pro' 
-      ? new Date(Date.now() + months * 30 * 24 * 60 * 60 * 1000).toISOString() 
+
+    const expiryDate = newTier === 'pro'
+      // eslint-disable-next-line react-hooks/purity -- expiry computed in an event handler, not render
+      ? new Date(Date.now() + months * 30 * 24 * 60 * 60 * 1000).toISOString()
       : null;
 
     try {
       const { error } = await supabase
         .from('organizations')
-        .update({ 
+        .update({
           subscription_tier: newTier,
           subscription_status: newTier === 'pro' ? 'active' : 'inactive',
           subscription_expires_at: expiryDate
@@ -63,11 +58,11 @@ const AdminPanel = () => {
         .eq('id', orgId);
 
       if (error) throw error;
-      
-      setOrganizations(prev => prev.map(org => 
-        org.id === orgId ? { 
-          ...org, 
-          subscription_tier: newTier, 
+
+      setOrganizations(prev => prev.map(org =>
+        org.id === orgId ? {
+          ...org,
+          subscription_tier: newTier,
           subscription_status: newTier === 'pro' ? 'active' : 'inactive',
           subscription_expires_at: expiryDate
         } : org
@@ -77,6 +72,23 @@ const AdminPanel = () => {
     } finally {
       setUpdatingId(null);
     }
+  };
+
+  const handleTierAction = (org) => {
+    if (org.subscription_tier === 'pro') {
+      applyTierChange(org.id, 'free');
+    } else {
+      setProMonths('1');
+      setProModalOrg(org);
+    }
+  };
+
+  const confirmActivatePro = async () => {
+    if (!proModalOrg) return;
+    const orgId = proModalOrg.id;
+    const months = parseInt(proMonths) || 1;
+    setProModalOrg(null);
+    await applyTierChange(orgId, 'pro', months);
   };
 
   const filteredOrgs = organizations.filter(org => 
@@ -170,7 +182,7 @@ const AdminPanel = () => {
                     <Button 
                       size="small" 
                       variant={org.subscription_tier === 'pro' ? 'outline' : 'primary'}
-                      onClick={() => toggleTier(org.id, org.subscription_tier)}
+                      onClick={() => handleTierAction(org)}
                       disabled={updatingId === org.id}
                     >
                       {updatingId === org.id ? (
@@ -200,6 +212,47 @@ const AdminPanel = () => {
           </tbody>
         </table>
       </div>
+
+      <Modal
+        isOpen={!!proModalOrg}
+        onClose={() => setProModalOrg(null)}
+        title="Activate Pro Access"
+      >
+        <form
+          onSubmit={(e) => { e.preventDefault(); confirmActivatePro(); }}
+          className="space-y-4"
+        >
+          <p className="text-sm text-text-secondary">
+            Grant Pro access to <strong className="text-text-primary">{proModalOrg?.name}</strong>. Choose the duration below.
+          </p>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="pro-months" className="agri-label">Months of Pro access</label>
+            <input
+              id="pro-months"
+              type="number"
+              min="1"
+              required
+              autoFocus
+              className="agri-input"
+              value={proMonths}
+              onChange={(e) => setProMonths(e.target.value)}
+            />
+          </div>
+          <div className="pt-2 flex gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => setProModalOrg(null)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" className="flex-1">
+              Activate Pro
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

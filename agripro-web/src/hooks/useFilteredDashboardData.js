@@ -1,13 +1,12 @@
 import { useMemo } from 'react';
 import { useGlobalStore } from '../store/globalStore';
-import { useDateFilter } from './useDateFilter';
-import { useFarmFilter } from './useFarmFilter';
-import { 
-  useFarms, useRevenue, useExpenses, useWorkers, useMachinery, 
+import {
+  useFarms, useRevenue, useExpenses, useWorkers, useMachinery,
   useLivestock, useCreditEntries, useLoans, useInventory
 } from './queries';
 import { supabase } from '../lib/supabase';
 import { useQuery } from '@tanstack/react-query';
+import { applyFilters, filterByFarm } from '../utils/dataFilters';
 
 export const useFilteredDashboardData = () => {
   // Global State Context
@@ -41,56 +40,31 @@ export const useFilteredDashboardData = () => {
   const dateRange = useGlobalStore(state => state.dateRange);
   const customRange = useGlobalStore(state => state.customRange);
 
-  // Manual filter logic mirroring App.jsx
-  const filterByFarm = (data) => {
-    if (farmFilter === 'all') return data;
-    return data.filter(item => item.farm_id === Number(farmFilter));
-  };
-
-  const filterByDate = (data) => {
-    if (dateRange === 'all') return data;
-    const now = new Date();
-    let startDate = new Date();
-
-    if (dateRange === '7d') startDate.setDate(now.getDate() - 7);
-    else if (dateRange === '30d') startDate.setDate(now.getDate() - 30);
-    else if (dateRange === '90d') startDate.setDate(now.getDate() - 90);
-    else if (dateRange === '1y') startDate.setFullYear(now.getFullYear() - 1);
-    else if (dateRange === 'custom' && customRange.start && customRange.end) {
-      const start = new Date(customRange.start);
-      const end = new Date(customRange.end);
-      end.setHours(23, 59, 59, 999);
-      return data.filter(item => {
-        const itemDate = new Date(item.date || item.created_at || item.sowing_date);
-        return itemDate >= start && itemDate <= end;
-      });
-    }
-
-    return data.filter(item => {
-      const dateStr = item.date || item.created_at || item.sowing_date || item.dob;
-      if (!dateStr) return true;
-      const itemDate = new Date(dateStr);
-      return itemDate >= startDate;
-    });
-  };
-
-  const applyFilters = (data) => filterByDate(filterByFarm(data));
-
-  const isLoading = loadingFarms || loadingRev || loadingExp || loadingWorkers || 
-                    loadingMachinery || loadingLivestock || loadingCredit || 
+  const isLoading = loadingFarms || loadingRev || loadingExp || loadingWorkers ||
+                    loadingMachinery || loadingLivestock || loadingCredit ||
                     loadingLoans || loadingInventory || loadingAttendance;
 
-  return {
-    farms,
-    revenue: applyFilters(revenue),
-    expenses: applyFilters(expenses),
-    machinery: filterByFarm(machinery),
-    livestock: filterByFarm(livestock),
-    workers: filterByFarm(workers),
-    inventory: filterByFarm(inventory),
-    creditEntries: applyFilters(creditEntries),
-    loans: applyFilters(loans),
-    attendance: applyFilters(attendance),
-    isLoading
-  };
+  return useMemo(() => {
+    const filters = { farmFilter, dateRange, customRange };
+    // Period data: narrowed by both farm and date.
+    const period = (data) => applyFilters(data, filters);
+    // Point-in-time data (assets you own, balances you are owed / owe): farm only.
+    // Date-filtering these hid assets and understated receivables — see utils/dataFilters.
+    const pointInTime = (data) => filterByFarm(data, farmFilter);
+
+    return {
+      // The farms table keys on `id`, not `farm_id`.
+      farms: filterByFarm(farms, farmFilter, 'id'),
+      revenue: period(revenue),
+      expenses: period(expenses),
+      attendance: period(attendance),
+      machinery: pointInTime(machinery),
+      livestock: pointInTime(livestock),
+      workers: pointInTime(workers),
+      inventory: pointInTime(inventory),
+      creditEntries: pointInTime(creditEntries),
+      loans: pointInTime(loans),
+      isLoading
+    };
+  }, [farms, revenue, expenses, machinery, livestock, workers, inventory, creditEntries, loans, attendance, farmFilter, dateRange, customRange, isLoading]);
 };

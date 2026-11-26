@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useCallback } from 'react';
 import { useGlobalStore } from '../store/globalStore';
+import { filterByDate } from '../utils/dataFilters';
 
 export const useDateFilter = () => {
   const dateRange = useGlobalStore(state => state.dateRange);
@@ -7,42 +8,16 @@ export const useDateFilter = () => {
   const customRange = useGlobalStore(state => state.customRange);
   const setCustomRange = useGlobalStore(state => state.setCustomRange);
 
-  const filterByDate = (data) => {
-    if (dateRange === 'all') return data;
-    
-    const now = new Date();
-    let startDate = new Date();
-
-    if (dateRange === '7d') startDate.setDate(now.getDate() - 7);
-    else if (dateRange === '30d') startDate.setDate(now.getDate() - 30);
-    else if (dateRange === '90d') startDate.setDate(now.getDate() - 90);
-    else if (dateRange === '1y') startDate.setFullYear(now.getFullYear() - 1);
-    else if (dateRange === 'custom' && customRange.start && customRange.end) {
-      const start = new Date(customRange.start);
-      const end = new Date(customRange.end);
-      end.setHours(23, 59, 59, 999);
-      
-      return data.filter(item => {
-        const itemDate = new Date(item.date || item.created_at || item.sowing_date);
-        return itemDate >= start && itemDate <= end;
-      });
-    }
-
-    return data.filter(item => {
-      // Look for common date fields
-      const dateStr = item.date || item.created_at || item.sowing_date || item.dob;
-      if (!dateStr) return true; // If no date, include it? Or exclude? Usually assets stay.
-      
-      const itemDate = new Date(dateStr);
-      return itemDate >= startDate;
-    });
-  };
+  const filterByDateRange = useCallback(
+    (data) => filterByDate(data, dateRange, customRange),
+    [dateRange, customRange]
+  );
 
   return {
     dateRange,
     setDateRange,
     customRange,
     setCustomRange,
-    filterByDate
+    filterByDate: filterByDateRange
   };
 };

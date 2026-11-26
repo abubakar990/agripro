@@ -26,3 +26,9 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Test artifacts and temp
+playwright-report/data/
+test-results/
+supabase/.temp/
+

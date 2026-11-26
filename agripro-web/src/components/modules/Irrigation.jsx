@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { IconPlus, IconDroplet, IconClock, IconReceipt, IconTrash } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
 import Button from '../shared/Button';
@@ -8,12 +8,14 @@ import { supabase } from '../../lib/supabase';
 
 import { useIrrigationLog, useFarms, useFarmPlots, useCropCycles } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
+import { useGlobalStore } from '../../store/globalStore';
 import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
 import { toast } from '../../utils/toast';
 import { confirmDialog } from '../../utils/confirmDialog';
 
 const Irrigation = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const farmFilter = useGlobalStore(state => state.farmFilter);
   const { data: farms = [] } = useFarms(currentOrgId);
   const farmIds = farms.map(f => f.id);
 
@@ -25,8 +27,16 @@ const Irrigation = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const getInitialFarmId = () => {
+    if (farmFilter !== 'all' && farms.some(f => String(f.id) === String(farmFilter))) {
+      return Number(farmFilter);
+    }
+    return farms[0]?.id || '';
+  };
+
   const [formData, setFormData] = useState({
-    farm_id: farms.length > 0 ? farms[0].id : '',
+    farm_id: getInitialFarmId(),
     date: new Date().toISOString().split('T')[0],
     field: '',
     source: 'Tube-well',
@@ -38,6 +48,16 @@ const Irrigation = () => {
     crop_cycle_id: '',
     area_acres: ''
   });
+
+  // Sync default farm_id when farms finish loading
+  useEffect(() => {
+    if (farms.length > 0 && !formData.farm_id) {
+      setFormData(prev => ({
+        ...prev,
+        farm_id: getInitialFarmId()
+      }));
+    }
+  }, [farms, farmFilter]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -60,37 +80,62 @@ const Irrigation = () => {
     }));
   };
 
+  const openAddModal = () => {
+    setFormData({
+      farm_id: getInitialFarmId(),
+      date: new Date().toISOString().split('T')[0],
+      field: '',
+      source: 'Tube-well',
+      hours: '',
+      cost: '',
+      crop: '',
+      note: '',
+      plot_id: '',
+      crop_cycle_id: '',
+      area_acres: ''
+    });
+    setIsModalOpen(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('irrigation_log').insert([{
+      const targetFarmId = formData.farm_id 
+        ? parseInt(formData.farm_id) 
+        : (farms.length > 0 ? farms[0].id : null);
+
+      if (!targetFarmId || isNaN(targetFarmId)) {
+        toast.error('Please select a valid farm. Create a farm first if none exist.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUserId = authData?.user?.id || null;
+
+      const payload = {
         ...formData,
-        farm_id: parseInt(formData.farm_id),
+        farm_id: targetFarmId,
         hours: parseFloat(formData.hours) || 0,
         cost: parseFloat(formData.cost) || 0,
         plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
         crop_cycle_id: formData.crop_cycle_id ? parseInt(formData.crop_cycle_id) : null,
         area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null
-      }]);
+      };
+
+      if (currentUserId) {
+        payload.user_id = currentUserId;
+      }
+
+      const { error } = await supabase.from('irrigation_log').insert([payload]);
       
       if (error) throw error;
       
+      toast.success('Irrigation session logged successfully');
       await refetch();
       setIsModalOpen(false);
-      setFormData({
-        farm_id: farms.length > 0 ? farms[0].id : '',
-        date: new Date().toISOString().split('T')[0],
-        field: '',
-        source: 'Tube-well',
-        hours: '',
-        cost: '',
-        crop: '',
-        note: '',
-        plot_id: '',
-        crop_cycle_id: '',
-        area_acres: ''
-      });
+      openAddModal();
     } catch (error) {
       console.error('Error adding irrigation log:', error);
       toast.error('Error adding irrigation log: ' + error.message);
@@ -104,6 +149,7 @@ const Irrigation = () => {
     try {
       const { error } = await supabase.from('irrigation_log').delete().eq('id', id);
       if (error) throw error;
+      toast.success('Irrigation log entry deleted');
       await refetch();
     } catch (error) {
       console.error('Error deleting irrigation log:', error);
@@ -135,7 +181,7 @@ const Irrigation = () => {
           <h2 className="text-xl font-bold text-text-primary">Irrigation Log</h2>
           <p className="text-sm text-text-muted">Track water usage, sources, and costs.</p>
         </div>
-        <Button variant="primary" onClick={() => setIsModalOpen(true)}>
+        <Button variant="primary" onClick={openAddModal}>
           <IconPlus size={18} />
           Log Irrigation
         </Button>
@@ -238,14 +284,18 @@ const Irrigation = () => {
               <label className="agri-label">Farm</label>
               <select
                 name="farm_id"
-                value={formData.farm_id}
+                value={formData.farm_id || (farms[0]?.id ?? '')}
                 onChange={handleInputChange}
                 required
                 className="agri-input"
               >
-                {farms.map(farm => (
-                  <option key={farm.id} value={farm.id}>{farm.name}</option>
-                ))}
+                {farms.length === 0 ? (
+                  <option value="">No farms available</option>
+                ) : (
+                  farms.map(farm => (
+                    <option key={farm.id} value={farm.id}>{farm.name}</option>
+                  ))
+                )}
               </select>
             </div>
             <div className="flex flex-col gap-1">
@@ -282,7 +332,7 @@ const Irrigation = () => {
             </div>
             <div className="flex flex-col gap-1">
               <label className="agri-label">Area (Acres)</label>
-              <input type="number" name="area_acres" value={formData.area_acres} onChange={handleInputChange} step="0.01" placeholder="Auto" className="agri-input" />
+              <input type="number" name="area_acres" value={formData.area_acres} onChange={handleInputChange} step="0.01" min="0" placeholder="Auto" className="agri-input" />
             </div>
           </div>
 
@@ -332,6 +382,7 @@ const Irrigation = () => {
               <input
                 type="number"
                 step="0.5"
+                min="0"
                 name="hours"
                 value={formData.hours}
                 onChange={handleInputChange}
@@ -347,6 +398,7 @@ const Irrigation = () => {
                 name="cost"
                 value={formData.cost}
                 onChange={handleInputChange}
+                min="0"
                 placeholder="0.00"
                 className="agri-input"
               />
@@ -364,11 +416,17 @@ const Irrigation = () => {
             />
           </div>
 
+          {farms.length === 0 && (
+            <p className="text-xs text-error font-medium">
+              Please add at least one farm before logging irrigation.
+            </p>
+          )}
+
           <div className="pt-2 flex gap-3">
             <Button 
               type="button" 
               variant="outline" 
-              className="flex-1"
+              className="flex-1" 
               onClick={() => setIsModalOpen(false)}
             >
               Cancel
@@ -377,7 +435,7 @@ const Irrigation = () => {
               type="submit" 
               variant="primary" 
               className="flex-1"
-              disabled={isSubmitting}
+              disabled={isSubmitting || farms.length === 0}
             >
               {isSubmitting ? 'Saving...' : 'Save Log'}
             </Button>

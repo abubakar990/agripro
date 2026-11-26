@@ -1,8 +1,7 @@
 import React from 'react';
 import { 
-  IconPlant, 
-  IconTrendingUp, 
-  IconUsers, 
+  IconPlant,
+  IconUsers,
   IconTractor, 
   IconReportMoney, 
   IconShieldCheck, 
@@ -270,11 +269,12 @@ const LandingPage = ({ onGetStarted }) => {
               >
                 Create Free Account
               </button>
-              <button 
-                className="px-10 h-14 bg-primary-dark/30 text-white font-bold rounded-2xl border border-white/20 hover:bg-primary-dark/40 transition-all"
+              <a
+                href="mailto:support@getsledge.com?subject=AgriPro%20Sales%20Inquiry"
+                className="px-10 h-14 flex items-center justify-center bg-primary-dark/30 text-white font-bold rounded-2xl border border-white/20 hover:bg-primary-dark/40 transition-all"
               >
                 Contact Sales
-              </button>
+              </a>
             </div>
           </div>
         </div>
@@ -289,9 +289,9 @@ const LandingPage = ({ onGetStarted }) => {
           </div>
           <p className="text-sm text-text-muted mb-8">© 2026 AgriPro Farm Manager. All rights reserved.</p>
           <div className="flex justify-center gap-6">
-            <a href="#" className="text-text-muted hover:text-primary transition-colors">Privacy Policy</a>
-            <a href="#" className="text-text-muted hover:text-primary transition-colors">Terms of Service</a>
-            <a href="#" className="text-text-muted hover:text-primary transition-colors">Documentation</a>
+            <span className="text-text-muted">Privacy Policy</span>
+            <span className="text-text-muted">Terms of Service</span>
+            <a href="mailto:support@getsledge.com" className="text-text-muted hover:text-primary transition-colors">Contact Support</a>
           </div>
         </div>
       </footer>

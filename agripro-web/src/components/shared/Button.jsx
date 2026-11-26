@@ -1,5 +1,3 @@
-import React from 'react';
-
 const Button = ({ children, variant = 'primary', size = 'default', className = '', ...props }) => {
   const variants = {
     primary: 'bg-primary text-white hover:bg-primary-light',
@@ -16,7 +14,7 @@ const Button = ({ children, variant = 'primary', size = 'default', className = '
 
   return (
     <button 
-      className={`rounded-btn font-bold transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0 ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`rounded-btn font-bold transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none ${variants[variant]} ${sizes[size]} ${className}`}
       {...props}
     >
       {children}

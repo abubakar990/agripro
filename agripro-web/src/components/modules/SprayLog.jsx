@@ -1,19 +1,20 @@
-import React, { useState, useMemo } from 'react';
-import { IconPlus, IconFlask, IconSearch, IconReceipt, IconTrash } from '@tabler/icons-react';
+import { useState, useMemo, useEffect } from 'react';
+import { IconPlus, IconFlask, IconReceipt, IconTrash } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
-
 import { useSprayLog, useFarms, useFarmPlots, useCropCycles } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
+import { useGlobalStore } from '../../store/globalStore';
 import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
 import { toast } from '../../utils/toast';
 import { confirmDialog } from '../../utils/confirmDialog';
 
 const SprayLog = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const farmFilter = useGlobalStore(state => state.farmFilter);
   const { data: farms = [] } = useFarms(currentOrgId);
   const farmIds = farms.map(f => f.id);
 
@@ -25,8 +26,16 @@ const SprayLog = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const getInitialFarmId = () => {
+    if (farmFilter !== 'all' && farms.some(f => String(f.id) === String(farmFilter))) {
+      return Number(farmFilter);
+    }
+    return farms[0]?.id || '';
+  };
+
   const [formData, setFormData] = useState({
-    farm_id: farms.length > 0 ? farms[0].id : '',
+    farm_id: getInitialFarmId(),
     date: new Date().toISOString().split('T')[0],
     field: '',
     chemical: '',
@@ -40,6 +49,16 @@ const SprayLog = () => {
     crop_cycle_id: '',
     area_acres: ''
   });
+
+  // Sync default farm_id when farms finish loading
+  useEffect(() => {
+    if (farms.length > 0 && !formData.farm_id) {
+      setFormData(prev => ({
+        ...prev,
+        farm_id: getInitialFarmId()
+      }));
+    }
+  }, [farms, farmFilter]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -62,40 +81,65 @@ const SprayLog = () => {
     }));
   };
 
+  const openAddModal = () => {
+    setFormData({
+      farm_id: getInitialFarmId(),
+      date: new Date().toISOString().split('T')[0],
+      field: '',
+      chemical: '',
+      qty: '',
+      qty_value: '',
+      qty_unit: 'Litres',
+      crop: '',
+      purpose: 'Pesticide',
+      cost: '',
+      plot_id: '',
+      crop_cycle_id: '',
+      area_acres: ''
+    });
+    setIsModalOpen(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('spray_log').insert([{
+      const targetFarmId = formData.farm_id 
+        ? parseInt(formData.farm_id) 
+        : (farms.length > 0 ? farms[0].id : null);
+
+      if (!targetFarmId || isNaN(targetFarmId)) {
+        toast.error('Please select a valid farm. Create a farm first if none exist.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUserId = authData?.user?.id || null;
+
+      const payload = {
         ...formData,
-        farm_id: parseInt(formData.farm_id),
+        farm_id: targetFarmId,
         cost: parseFloat(formData.cost) || 0,
         plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
         crop_cycle_id: formData.crop_cycle_id ? parseInt(formData.crop_cycle_id) : null,
         area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
         qty_value: formData.qty_value ? parseFloat(formData.qty_value) : null,
         qty_unit: formData.qty_unit || null
-      }]);
+      };
+
+      if (currentUserId) {
+        payload.user_id = currentUserId;
+      }
+
+      const { error } = await supabase.from('spray_log').insert([payload]);
       
       if (error) throw error;
       
+      toast.success('Spray log entry added successfully');
       await refetch();
       setIsModalOpen(false);
-      setFormData({
-        farm_id: farms.length > 0 ? farms[0].id : '',
-        date: new Date().toISOString().split('T')[0],
-        field: '',
-        chemical: '',
-        qty: '',
-        qty_value: '',
-        qty_unit: 'Litres',
-        crop: '',
-        purpose: 'Pesticide',
-        cost: '',
-        plot_id: '',
-        crop_cycle_id: '',
-        area_acres: ''
-      });
+      openAddModal();
     } catch (error) {
       console.error('Error adding spray log:', error);
       toast.error('Error adding spray log: ' + error.message);
@@ -109,6 +153,7 @@ const SprayLog = () => {
     try {
       const { error } = await supabase.from('spray_log').delete().eq('id', id);
       if (error) throw error;
+      toast.success('Spray log entry deleted');
       await refetch();
     } catch (error) {
       console.error('Error deleting spray log:', error);
@@ -140,7 +185,7 @@ const SprayLog = () => {
           <h2 className="text-xl font-bold text-text-primary">Spray Log</h2>
           <p className="text-sm text-text-muted">Monitor chemical applications and pest control.</p>
         </div>
-        <Button variant="danger" onClick={() => setIsModalOpen(true)}>
+        <Button variant="danger" onClick={openAddModal}>
           <IconPlus size={18} />
           New Spray Entry
         </Button>
@@ -246,14 +291,18 @@ const SprayLog = () => {
               <label className="agri-label">Farm</label>
               <select
                 name="farm_id"
-                value={formData.farm_id}
+                value={formData.farm_id || (farms[0]?.id ?? '')}
                 onChange={handleInputChange}
                 required
                 className="agri-input"
               >
-                {farms.map(farm => (
-                  <option key={farm.id} value={farm.id}>{farm.name}</option>
-                ))}
+                {farms.length === 0 ? (
+                  <option value="">No farms available</option>
+                ) : (
+                  farms.map(farm => (
+                    <option key={farm.id} value={farm.id}>{farm.name}</option>
+                  ))
+                )}
               </select>
             </div>
             <div className="flex flex-col gap-1">
@@ -290,19 +339,28 @@ const SprayLog = () => {
             </div>
             <div className="flex flex-col gap-1">
               <label className="agri-label">Area (Acres)</label>
-              <input type="number" name="area_acres" value={formData.area_acres} onChange={handleInputChange} step="0.01" placeholder="Auto" className="agri-input" />
+              <input
+                type="number"
+                step="0.01"
+                name="area_acres"
+                value={formData.area_acres}
+                onChange={handleInputChange}
+                placeholder="Auto or override"
+                className="agri-input"
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
-              <label className="agri-label">Field/Location</label>
+              <label className="agri-label">Field / Location Description</label>
               <input
                 type="text"
                 name="field"
                 value={formData.field}
                 onChange={handleInputChange}
-                placeholder="e.g. South Sector"
+                required
+                placeholder="e.g. North Plot #3"
                 className="agri-input"
               />
             </div>
@@ -314,58 +372,64 @@ const SprayLog = () => {
                 value={formData.crop}
                 onChange={handleInputChange}
                 required
-                placeholder="e.g. Cotton"
+                placeholder="e.g. Cotton, Wheat"
                 className="agri-input"
               />
             </div>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="agri-label">Chemical Used</label>
-            <input
-              type="text"
-              name="chemical"
-              value={formData.chemical}
-              onChange={handleInputChange}
-              required
-              placeholder="e.g. Glyphosate 480SL"
-              className="agri-input"
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
-              <label className="agri-label">Purpose</label>
+              <label className="agri-label">Chemical Name / Brand</label>
+              <input
+                type="text"
+                name="chemical"
+                value={formData.chemical}
+                onChange={handleInputChange}
+                required
+                placeholder="e.g. Tracer, Belt, Urea"
+                className="agri-input"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="agri-label">Purpose / Target</label>
               <select
                 name="purpose"
                 value={formData.purpose}
                 onChange={handleInputChange}
-                required
                 className="agri-input"
               >
                 <option value="Pesticide">Pesticide</option>
+                <option value="Fertilizer">Fertilizer (Foliar)</option>
                 <option value="Herbicide">Herbicide</option>
                 <option value="Fungicide">Fungicide</option>
-                <option value="Fertilizer">Foliar Fert</option>
-                <option value="Other">Other</option>
+                <option value="Nutrient Spray">Nutrient Spray</option>
               </select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
-              <label className="agri-label">Quantity</label>
-              <div className="flex gap-2">
+              <label className="agri-label">Quantity Applied</label>
+              <div className="grid grid-cols-2 gap-2">
                 <input
                   type="number"
+                  step="0.01"
                   name="qty_value"
                   value={formData.qty_value}
                   onChange={handleInputChange}
-                  step="0.01"
-                  placeholder="0.00"
-                  className="agri-input flex-1"
+                  placeholder="e.g. 2.5"
+                  className="agri-input"
                 />
-                <select name="qty_unit" value={formData.qty_unit} onChange={handleInputChange} className="agri-input w-24">
+                <select
+                  name="qty_unit"
+                  value={formData.qty_unit}
+                  onChange={handleInputChange}
+                  className="agri-input"
+                >
                   <option value="Litres">Litres</option>
-                  <option value="Kg">Kg</option>
                   <option value="ml">ml</option>
+                  <option value="KG">KG</option>
                   <option value="grams">grams</option>
                 </select>
               </div>
@@ -377,17 +441,24 @@ const SprayLog = () => {
                 name="cost"
                 value={formData.cost}
                 onChange={handleInputChange}
+                min="0"
                 placeholder="0.00"
                 className="agri-input"
               />
             </div>
           </div>
 
+          {farms.length === 0 && (
+            <p className="text-xs text-error font-medium">
+              Please add at least one farm before recording a spray log entry.
+            </p>
+          )}
+
           <div className="pt-2 flex gap-3">
             <Button 
               type="button" 
               variant="outline" 
-              className="flex-1"
+              className="flex-1" 
               onClick={() => setIsModalOpen(false)}
             >
               Cancel
@@ -396,7 +467,7 @@ const SprayLog = () => {
               type="submit" 
               variant="danger" 
               className="flex-1"
-              disabled={isSubmitting}
+              disabled={isSubmitting || farms.length === 0}
             >
               {isSubmitting ? 'Saving...' : 'Save Entry'}
             </Button>

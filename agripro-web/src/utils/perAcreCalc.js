@@ -93,15 +93,14 @@ export const totalArea = (entries, context) => {
 /**
  * Get performance score for a plot (0-100)
  */
-export const getPlotScore = (plotId, { expenses = [], revenue = [], cropCycles = [], farmPlots = [], farms = [] } = {}) => {
+export const getPlotScore = (plotId, { expenses = [], revenue = [], farmPlots = [] } = {}) => {
   const plot = farmPlots.find(p => p.id === plotId);
   if (!plot?.area_acres || parseFloat(plot.area_acres) <= 0) return null;
-  
+
   const area = parseFloat(plot.area_acres);
   const plotExpenses = expenses.filter(e => e.plot_id === plotId);
   const plotRevenue = revenue.filter(r => r.plot_id === plotId);
-  const plotCycles = cropCycles.filter(c => c.plot_ids?.includes(plotId) || c.plot_id === plotId);
-  
+
   if (plotExpenses.length === 0 && plotRevenue.length === 0) return null;
   
   const totalExpense = plotExpenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);

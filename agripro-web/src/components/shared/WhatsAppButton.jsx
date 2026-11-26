@@ -1,4 +1,3 @@
-import React from 'react';
 import { IconBrandWhatsapp } from '@tabler/icons-react';
 
 const WhatsAppButton = () => {

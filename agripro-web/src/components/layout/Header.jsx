@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   IconBell, 
   IconChevronDown, 
@@ -6,7 +6,6 @@ import {
   IconLogout, 
   IconBuildingCommunity, 
   IconMenu2,
-  IconCheck,
   IconClock,
   IconTrash
 } from '@tabler/icons-react';
@@ -16,6 +15,8 @@ import { useNavigate } from 'react-router-dom';
 const Header = ({ farms, farmFilter, setFarmFilter, currentFarmName, user, organizations = [], currentOrg, onOrgSwitch, toggleMobileSidebar }) => {
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showOrgSwitcher, setShowOrgSwitcher] = useState(false);
+  const [showFarmFilter, setShowFarmFilter] = useState(false);
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -35,6 +36,7 @@ const Header = ({ farms, farmFilter, setFarmFilter, currentFarmName, user, organ
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial notifications fetch on mount
     fetchNotifications();
 
     if (currentOrg?.id) {
@@ -89,8 +91,9 @@ const Header = ({ farms, farmFilter, setFarmFilter, currentFarmName, user, organ
     <header className="h-[58px] bg-white border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-10">
       <div className="flex items-center gap-2 lg:gap-3">
         {/* Mobile Menu Toggle */}
-        <button 
+        <button
           onClick={toggleMobileSidebar}
+          aria-label="Open menu"
           className="p-2 -ml-2 text-text-secondary hover:bg-bg rounded-md lg:hidden"
         >
           <IconMenu2 size={24} />
@@ -98,67 +101,84 @@ const Header = ({ farms, farmFilter, setFarmFilter, currentFarmName, user, organ
 
         {/* Organization Switcher */}
         {organizations.length > 1 && (
-          <div className="relative group">
-            <button className="flex items-center gap-2 px-2 lg:px-3 py-1.5 rounded-md border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors font-bold text-[10px] lg:text-xs text-primary uppercase tracking-wider">
+          <div className="relative">
+            <button
+              onClick={() => setShowOrgSwitcher(!showOrgSwitcher)}
+              className="flex items-center gap-2 px-2 lg:px-3 py-1.5 rounded-md border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors font-bold text-[10px] lg:text-xs text-primary uppercase tracking-wider"
+            >
               <IconBuildingCommunity size={16} className="hidden sm:block" />
               <span className="max-w-[80px] lg:max-w-[120px] truncate">{currentOrg?.name}</span>
               <IconChevronDown size={12} />
             </button>
-            
-            <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-md shadow-xl border border-border hidden group-hover:block overflow-hidden z-[60]">
-              <div className="px-4 py-2 border-b border-border bg-gray-50">
-                <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Switch Organization</span>
-              </div>
-              {organizations.map(org => (
-                <button 
-                  key={org.id}
-                  onClick={() => onOrgSwitch(org.id)}
-                  className={`w-full text-left px-4 py-3 text-sm hover:bg-bg transition-colors flex items-center justify-between ${currentOrg?.id === org.id ? 'bg-primary/5 font-bold text-primary' : 'text-text-secondary'}`}
-                >
-                  <div className="flex flex-col">
-                    <span className="truncate">{org.name}</span>
-                    <span className="text-[10px] opacity-60 font-normal">{org.subscription_tier?.toUpperCase()} PLAN</span>
+
+            {showOrgSwitcher && (
+              <>
+                <div className="fixed inset-0 z-[55]" onClick={() => setShowOrgSwitcher(false)}></div>
+                <div className="absolute top-full left-0 mt-1 w-64 bg-white rounded-md shadow-xl border border-border overflow-hidden z-[60]">
+                  <div className="px-4 py-2 border-b border-border bg-gray-50">
+                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Switch Organization</span>
                   </div>
-                  {currentOrg?.id === org.id && <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>}
-                </button>
-              ))}
-            </div>
+                  {organizations.map(org => (
+                    <button
+                      key={org.id}
+                      onClick={() => { onOrgSwitch(org.id); setShowOrgSwitcher(false); }}
+                      className={`w-full text-left px-4 py-3 text-sm hover:bg-bg transition-colors flex items-center justify-between ${currentOrg?.id === org.id ? 'bg-primary/5 font-bold text-primary' : 'text-text-secondary'}`}
+                    >
+                      <div className="flex flex-col">
+                        <span className="truncate">{org.name}</span>
+                        <span className="text-[10px] opacity-60 font-normal">{org.subscription_tier?.toUpperCase()} PLAN</span>
+                      </div>
+                      {currentOrg?.id === org.id && <div className="w-1.5 h-1.5 rounded-full bg-primary"></div>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 
         {/* Farm Filter */}
-        <div className="relative group">
-          <button className="flex items-center gap-2 px-3 lg:px-4 py-2 rounded-md border border-border hover:bg-bg transition-colors font-bold text-xs lg:text-sm text-text-primary">
+        <div className="relative">
+          <button
+            onClick={() => setShowFarmFilter(!showFarmFilter)}
+            className="flex items-center gap-2 px-3 lg:px-4 py-2 rounded-md border border-border hover:bg-bg transition-colors font-bold text-xs lg:text-sm text-text-primary"
+          >
             <IconPlant size={18} className="text-primary hidden sm:block" />
             <span className="max-w-[80px] lg:max-w-none truncate">{currentFarmName}</span>
             <IconChevronDown size={14} className="text-text-muted" />
           </button>
-          
-          <div className="absolute top-full left-0 mt-1 w-56 bg-white rounded-md shadow-lg border border-border hidden group-hover:block overflow-hidden z-50">
-            <button 
-              onClick={() => setFarmFilter('all')}
-              className={`w-full text-left px-4 py-2.5 text-sm hover:bg-bg transition-colors ${farmFilter === 'all' ? 'bg-bg font-bold text-primary' : ''}`}
-            >
-              🌾 All Farms
-            </button>
-            {farms.map(farm => (
-              <button 
-                key={farm.id}
-                onClick={() => setFarmFilter(farm.id)}
-                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-bg transition-colors ${Number(farmFilter) === farm.id ? 'bg-bg font-bold text-primary' : ''}`}
-              >
-                🏡 {farm.name}
-              </button>
-            ))}
-          </div>
+
+          {showFarmFilter && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowFarmFilter(false)}></div>
+              <div className="absolute top-full left-0 mt-1 w-56 bg-white rounded-md shadow-lg border border-border overflow-hidden z-50">
+                <button
+                  onClick={() => { setFarmFilter('all'); setShowFarmFilter(false); }}
+                  className={`w-full text-left px-4 py-2.5 text-sm hover:bg-bg transition-colors ${farmFilter === 'all' ? 'bg-bg font-bold text-primary' : ''}`}
+                >
+                  🌾 All Farms
+                </button>
+                {farms.map(farm => (
+                  <button
+                    key={farm.id}
+                    onClick={() => { setFarmFilter(farm.id); setShowFarmFilter(false); }}
+                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-bg transition-colors ${Number(farmFilter) === farm.id ? 'bg-bg font-bold text-primary' : ''}`}
+                  >
+                    🏡 {farm.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       <div className="flex items-center gap-2 lg:gap-4">
         {/* Notifications Dropdown */}
         <div className="relative">
-          <button 
+          <button
             onClick={() => setShowNotifications(!showNotifications)}
+            aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
             className="relative p-2 text-text-secondary hover:bg-bg rounded-full transition-colors flex"
           >
             <IconBell size={20} stroke={1.5} />
@@ -213,11 +233,12 @@ const Header = ({ farms, farmFilter, setFarmFilter, currentFarmName, user, organ
                           </div>
                           {!n.is_read && <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1"></div>}
                         </div>
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             deleteNotification(n.id);
                           }}
+                          aria-label="Delete notification"
                           className="absolute top-3 right-3 p-1 text-text-muted hover:text-expense opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <IconTrash size={12} />
@@ -248,10 +269,11 @@ const Header = ({ farms, farmFilter, setFarmFilter, currentFarmName, user, organ
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm shadow-sm flex-shrink-0">
             {(user?.user_metadata?.full_name || user?.email)?.charAt(0).toUpperCase() || 'A'}
           </div>
-          <button 
+          <button
             onClick={handleLogout}
             className="p-2 text-text-muted hover:text-expense hover:bg-red-50 rounded-lg transition-all flex items-center gap-2 group"
             title="Sign Out"
+            aria-label="Sign Out"
           >
             <IconLogout size={18} />
           </button>

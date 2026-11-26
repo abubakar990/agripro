@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { 
   IconTrendingUp, 
   IconTrendingDown, 
@@ -10,6 +10,7 @@ import {
   IconMilk 
 } from '@tabler/icons-react';
 import { formatPKR } from '../../utils/format';
+import { creditOutstanding, loanOutstanding } from '../../utils/finance';
 import Badge from '../shared/Badge';
 
 const KpiCard = ({ title, value, icon: Icon, colorClass, trend }) => (
@@ -34,7 +35,7 @@ import { useFilteredDashboardData } from '../../hooks/useFilteredDashboardData';
 
 const Dashboard = () => {
   const { 
-    revenue, expenses, farms, workers, machinery, 
+    revenue, expenses, workers, machinery,
     livestock, creditEntries, loans, inventory, attendance, isLoading 
   } = useFilteredDashboardData();
 
@@ -44,15 +45,15 @@ const Dashboard = () => {
     const totalExp = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
     const netProfit = totalRev - totalExp;
     
-    const creditReceivable = creditEntries.reduce((sum, entry) => {
-      const payments = entry.payments?.reduce((pSum, p) => pSum + (parseFloat(p.amount) || 0), 0) || 0;
-      return sum + (parseFloat(entry.total_amount) - parseFloat(entry.advance) - payments);
-    }, 0);
+    // Receivables = money owed TO us (Credit Sales only), never credit purchases (payables).
+    const creditReceivable = creditEntries
+      .filter(entry => entry.type === 'Credit Sale')
+      .reduce((sum, entry) => sum + creditOutstanding(entry), 0);
 
-    const outstandingLoans = loans.reduce((sum, loan) => {
-      const payments = loan.payments?.reduce((pSum, p) => pSum + (parseFloat(p.amount) || 0), 0) || 0;
-      return sum + (parseFloat(loan.principal) - parseFloat(loan.paid) - payments);
-    }, 0);
+    // Debt = money WE owe (Borrowed loans only), never money we lent out.
+    const outstandingLoans = loans
+      .filter(loan => loan.type === 'Borrowed')
+      .reduce((sum, loan) => sum + loanOutstanding(loan), 0);
 
     const assetValue = machinery.reduce((sum, m) => sum + (parseFloat(m.current_value) || 0), 0) + 
                   livestock.reduce((sum, l) => sum + (parseFloat(l.current_value) || 0), 0);
@@ -70,7 +71,7 @@ const Dashboard = () => {
       attendance: `${todayAttendance} / ${workers.length}`,
       livestockCount: livestock.length
     };
-  }, [revenue, expenses, workers, machinery, livestock, creditEntries, loans, attendance]);
+  }, [revenue, expenses, workers, machinery, livestock, creditEntries, loans, attendance, isLoading]);
 
   const recentTransactions = useMemo(() => {
     const all = [
@@ -107,11 +108,9 @@ const Dashboard = () => {
     
     // Overdue Credit
     const today = new Date();
-    const overdueCreditCount = creditEntries.filter(entry => {
-      const paymentsTotal = entry.payments?.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0) || 0;
-      const balance = (parseFloat(entry.total_amount) || 0) - (parseFloat(entry.advance) || 0) - paymentsTotal;
-      return entry.due_date && new Date(entry.due_date) < today && balance > 0;
-    }).length;
+    const overdueCreditCount = creditEntries.filter(entry => (
+      entry.due_date && new Date(entry.due_date) < today && creditOutstanding(entry) > 0
+    )).length;
     if (overdueCreditCount > 0) {
       list.push({
         type: 'credit',

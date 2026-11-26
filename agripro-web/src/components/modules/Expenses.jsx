@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { IconPlus, IconReceipt2, IconTrendingDown, IconFilter, IconTrash, IconEdit } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
 import Button from '../shared/Button';
@@ -7,12 +7,14 @@ import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 import { useExpenses, useFarms, useCategories, useFarmPlots, useCropCycles } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
+import { useGlobalStore } from '../../store/globalStore';
 import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
 import { toast } from '../../utils/toast';
 import { confirmDialog } from '../../utils/confirmDialog';
 
 const Expenses = ({ user }) => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const farmFilter = useGlobalStore(state => state.farmFilter);
   const { data: farms = [] } = useFarms(currentOrgId);
   const farmIds = farms.map(f => f.id);
   
@@ -29,8 +31,16 @@ const Expenses = ({ user }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [customCategory, setCustomCategory] = useState('');
+
+  const getInitialFarmId = () => {
+    if (farmFilter !== 'all' && farms.some(f => String(f.id) === String(farmFilter))) {
+      return Number(farmFilter);
+    }
+    return farms[0]?.id || '';
+  };
+
   const [formData, setFormData] = useState({
-    farm_id: farms.length > 0 ? farms[0].id : '',
+    farm_id: getInitialFarmId(),
     date: new Date().toISOString().split('T')[0],
     category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
     description: '',
@@ -40,6 +50,16 @@ const Expenses = ({ user }) => {
     crop_cycle_id: '',
     area_acres: ''
   });
+
+  // Sync default farm_id when farms finish loading
+  useEffect(() => {
+    if (farms.length > 0 && !formData.farm_id) {
+      setFormData(prev => ({
+        ...prev,
+        farm_id: getInitialFarmId()
+      }));
+    }
+  }, [farms, farmFilter]);
 
   const stats = useMemo(() => {
     const context = { farmPlots, cropCycles, farms };
@@ -60,7 +80,7 @@ const Expenses = ({ user }) => {
       topCategory: topCategory ? topCategory[0] : '—',
       topCategoryAmount: topCategory ? topCategory[1] : 0
     };
-  }, [expenses]);
+  }, [expenses, farmPlots, cropCycles, farms]);
 
   const categoryTotals = useMemo(() => {
     const totals = expenses.reduce((acc, e) => {
@@ -123,61 +143,69 @@ const Expenses = ({ user }) => {
     let finalCategory = formData.category;
     
     try {
+      const targetFarmId = formData.farm_id 
+        ? parseInt(formData.farm_id) 
+        : (farms.length > 0 ? farms[0].id : null);
+
+      if (!targetFarmId || isNaN(targetFarmId)) {
+        toast.error('Please select a valid farm. Create a farm first if none exist.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const amount = parseFloat(formData.amount);
+      if (isNaN(amount) || amount <= 0) {
+        toast.error('Please enter a valid amount.');
+        setIsSubmitting(false);
+        return;
+      }
+
       if (formData.category === 'ADD_NEW') {
         const { error: catError } = await supabase
           .from('categories')
-          .insert([{ 
-            name: customCategory, 
+          .insert([{
+            name: customCategory,
             module: 'expense',
-            user_id: user?.id 
+            user_id: user?.id,
+            org_id: currentOrgId
           }]);
         
         if (catError && catError.code !== '23505') throw catError; // Ignore unique constraint violation
         finalCategory = customCategory;
       }
+
+      const payload = {
+        ...formData,
+        category: finalCategory,
+        amount: amount,
+        farm_id: targetFarmId,
+        plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
+        crop_cycle_id: formData.crop_cycle_id ? parseInt(formData.crop_cycle_id) : null,
+        area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null
+      };
+
+      if (user?.id) {
+        payload.user_id = user.id;
+      }
       
       if (editingId) {
         const { error } = await supabase
           .from('expenses')
-          .update({
-            ...formData,
-            category: finalCategory,
-            amount: parseFloat(formData.amount),
-            farm_id: parseInt(formData.farm_id),
-            plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
-            crop_cycle_id: formData.crop_cycle_id ? parseInt(formData.crop_cycle_id) : null,
-            area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null
-          })
+          .update(payload)
           .eq('id', editingId);
         if (error) throw error;
+        toast.success('Expense updated successfully');
       } else {
-        const { error } = await supabase.from('expenses').insert([{
-          ...formData,
-          category: finalCategory,
-          amount: parseFloat(formData.amount),
-          farm_id: parseInt(formData.farm_id),
-          plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
-          crop_cycle_id: formData.crop_cycle_id ? parseInt(formData.crop_cycle_id) : null,
-          area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null
-        }]);
+        const { error } = await supabase.from('expenses').insert([payload]);
         if (error) throw error;
+        toast.success('Expense recorded successfully');
       }
       
       await refetch();
       setIsModalOpen(false);
       setEditingId(null);
       setCustomCategory('');
-      setFormData({
-        farm_id: farms.length > 0 ? farms[0].id : '',
-        date: new Date().toISOString().split('T')[0],
-        category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
-        description: '',
-        party: '',
-        amount: '',
-        plot_id: '',
-        crop_cycle_id: '',
-        area_acres: ''
-      });
+      openAddModal();
     } catch (error) {
       console.error('Error saving expense:', error);
       toast.error('Error saving expense: ' + error.message);
@@ -192,6 +220,7 @@ const Expenses = ({ user }) => {
     try {
       const { error } = await supabase.from('expenses').delete().eq('id', id);
       if (error) throw error;
+      toast.success('Expense deleted');
       await refetch();
     } catch (error) {
       console.error('Error deleting expense:', error);
@@ -203,7 +232,7 @@ const Expenses = ({ user }) => {
     setEditingId(null);
     setCustomCategory('');
     setFormData({
-      farm_id: farms.length > 0 ? farms[0].id : '',
+      farm_id: getInitialFarmId(),
       date: new Date().toISOString().split('T')[0],
       category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
       description: '',
@@ -364,14 +393,18 @@ const Expenses = ({ user }) => {
               <label className="text-xs font-bold text-text-muted uppercase">Farm</label>
               <select
                 name="farm_id"
-                value={formData.farm_id}
+                value={formData.farm_id || (farms[0]?.id ?? '')}
                 onChange={handleInputChange}
                 required
                 className="agri-input"
               >
-                {farms.map(farm => (
-                  <option key={farm.id} value={farm.id}>{farm.name}</option>
-                ))}
+                {farms.length === 0 ? (
+                  <option value="">No farms available</option>
+                ) : (
+                  farms.map(farm => (
+                    <option key={farm.id} value={farm.id}>{farm.name}</option>
+                  ))
+                )}
               </select>
             </div>
             <div className="flex flex-col gap-1">
@@ -408,7 +441,15 @@ const Expenses = ({ user }) => {
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-bold text-text-muted uppercase">Area (Acres)</label>
-              <input type="number" name="area_acres" value={formData.area_acres} onChange={handleInputChange} step="0.01" placeholder="Auto" className="agri-input" />
+              <input
+                type="number"
+                step="0.01"
+                name="area_acres"
+                value={formData.area_acres}
+                onChange={handleInputChange}
+                placeholder="Auto or override"
+                className="agri-input"
+              />
             </div>
           </div>
 
@@ -422,12 +463,25 @@ const Expenses = ({ user }) => {
                 required
                 className="agri-input"
               >
-                {categories.map(cat => (
-                  <option key={cat.id} value={cat.name}>{cat.name}</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
-                <option value="ADD_NEW">Add New...</option>
+                <option value="ADD_NEW">+ Add New Category</option>
               </select>
             </div>
+            {formData.category === 'ADD_NEW' && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-muted uppercase">New Category Name</label>
+                <input
+                  type="text"
+                  value={customCategory}
+                  onChange={(e) => setCustomCategory(e.target.value)}
+                  placeholder="e.g. Bio-fertilizer"
+                  required
+                  className="agri-input"
+                />
+              </div>
+            )}
             <div className="flex flex-col gap-1">
               <label className="text-xs font-bold text-text-muted uppercase">Amount (PKR)</label>
               <input
@@ -436,55 +490,60 @@ const Expenses = ({ user }) => {
                 value={formData.amount}
                 onChange={handleInputChange}
                 required
+                min="0"
                 placeholder="0.00"
                 className="agri-input"
               />
             </div>
           </div>
 
-          {formData.category === 'ADD_NEW' && (
-            <div className="flex flex-col gap-1 animate-in fade-in slide-in-from-top-1">
-              <label className="text-xs font-bold text-text-muted uppercase">New Category Name</label>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-text-muted uppercase">Party / Vendor</label>
               <input
                 type="text"
-                value={customCategory}
-                onChange={(e) => setCustomCategory(e.target.value)}
-                required
-                placeholder="e.g. Water Bill, Repairs"
+                name="party"
+                value={formData.party}
+                onChange={handleInputChange}
+                placeholder="e.g. Local Mandi, Vendor Name"
                 className="agri-input"
               />
             </div>
-          )}
-
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold text-text-muted uppercase">Paid To (Party)</label>
-            <input
-              type="text"
-              name="party"
-              value={formData.party}
-              onChange={handleInputChange}
-              required
-              placeholder="Vendor or Person name"
-              className="agri-input"
-            />
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-text-muted uppercase">Description</label>
+              <input
+                type="text"
+                name="description"
+                value={formData.description}
+                onChange={handleInputChange}
+                placeholder="Brief note about the expense"
+                className="agri-input"
+              />
+            </div>
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold text-text-muted uppercase">Description</label>
+            <label className="text-xs font-bold text-text-muted uppercase">Notes</label>
             <textarea
-              name="description"
-              value={formData.description}
+              name="note"
+              value={formData.note || ''}
               onChange={handleInputChange}
               placeholder="Optional details..."
               className="agri-input min-h-[80px]"
             />
           </div>
 
+          {farms.length === 0 && (
+            <p className="text-xs text-error font-medium">
+              Please add at least one farm before recording an expense.
+            </p>
+          )}
+
           <div className="pt-2 flex gap-3">
             <Button 
               type="button" 
               variant="outline" 
-              className="flex-1"
+              className="flex-1" 
               onClick={() => setIsModalOpen(false)}
             >
               Cancel
@@ -493,7 +552,7 @@ const Expenses = ({ user }) => {
               type="submit" 
               variant="danger" 
               className="flex-1"
-              disabled={isSubmitting}
+              disabled={isSubmitting || farms.length === 0}
             >
               {isSubmitting ? 'Saving...' : 'Save Expense'}
             </Button>

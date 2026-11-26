@@ -1,45 +1,35 @@
+import { useMemo } from 'react';
 import { useGlobalStore } from '../store/globalStore';
+import { applyFilters, filterByFarm } from '../utils/dataFilters';
 
+/**
+ * Farm + date filtered view of a dataset. Use for *period* data — rows that describe
+ * something that happened on a date (revenue, expenses, attendance, irrigation, spray,
+ * machine usage, crop cycles).
+ */
 export const useFilteredData = (dataArray) => {
   const farmFilter = useGlobalStore(state => state.farmFilter);
   const dateRange = useGlobalStore(state => state.dateRange);
   const customRange = useGlobalStore(state => state.customRange);
 
-  if (!dataArray || !Array.isArray(dataArray)) return [];
+  return useMemo(
+    () => applyFilters(dataArray, { farmFilter, dateRange, customRange }),
+    [dataArray, farmFilter, dateRange, customRange]
+  );
+};
 
-  const filterByFarm = (data) => {
-    if (farmFilter === 'all') return data;
-    return data.filter(item => item.farm_id === Number(farmFilter));
-  };
+/**
+ * Farm-only filtered view of a dataset — deliberately ignores the date range.
+ *
+ * Use for *point-in-time* data: things you own or owe right now (inventory, machinery,
+ * livestock, workers, and the outstanding balances on credit entries and loans). Applying
+ * the date range to these hides assets and understates receivables/payables, because most
+ * of these tables have no `date` column and fall back to `created_at`.
+ *
+ * Pass key='id' to filter the farms table itself rather than rows that reference it.
+ */
+export const useFarmFilteredData = (dataArray, key = 'farm_id') => {
+  const farmFilter = useGlobalStore(state => state.farmFilter);
 
-  const filterByDate = (data) => {
-    if (dateRange === 'all') return data;
-    const now = new Date();
-    let startDate = new Date();
-
-    if (dateRange === '7d') startDate.setDate(now.getDate() - 7);
-    else if (dateRange === '30d') startDate.setDate(now.getDate() - 30);
-    else if (dateRange === '90d') startDate.setDate(now.getDate() - 90);
-    else if (dateRange === '1y') startDate.setFullYear(now.getFullYear() - 1);
-    else if (dateRange === 'custom' && customRange.start && customRange.end) {
-      const start = new Date(customRange.start);
-      const end = new Date(customRange.end);
-      end.setHours(23, 59, 59, 999);
-      return data.filter(item => {
-        const dateStr = item.date || item.created_at || item.sowing_date || item.dob;
-        if (!dateStr) return true;
-        const itemDate = new Date(dateStr);
-        return itemDate >= start && itemDate <= end;
-      });
-    }
-
-    return data.filter(item => {
-      const dateStr = item.date || item.created_at || item.sowing_date || item.dob;
-      if (!dateStr) return true;
-      const itemDate = new Date(dateStr);
-      return itemDate >= startDate;
-    });
-  };
-
-  return filterByDate(filterByFarm(dataArray));
+  return useMemo(() => filterByFarm(dataArray, farmFilter, key), [dataArray, farmFilter, key]);
 };

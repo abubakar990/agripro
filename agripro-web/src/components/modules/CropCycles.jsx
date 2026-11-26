@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { IconPlus, IconPlant, IconCalendar, IconChartBar, IconTrendingUp, IconTrash, IconReceipt, IconEdit, IconSearch } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
 import Button from '../shared/Button';
@@ -8,11 +8,13 @@ import { supabase } from '../../lib/supabase';
 
 import { useCropCycles, useFarms, useFarmPlots } from '../../hooks/queries';
 import { useFilteredData } from '../../hooks/useFilteredData';
+import { useGlobalStore } from '../../store/globalStore';
 import { toast } from '../../utils/toast';
 import { confirmDialog } from '../../utils/confirmDialog';
 
 const CropCycles = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const farmFilter = useGlobalStore(state => state.farmFilter);
   const { data: farms = [] } = useFarms(currentOrgId);
   const farmIds = farms.map(f => f.id);
 
@@ -25,8 +27,16 @@ const CropCycles = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [plotSearchTerm, setPlotSearchTerm] = useState('');
+
+  const getInitialFarmId = () => {
+    if (farmFilter !== 'all' && farms.some(f => String(f.id) === String(farmFilter))) {
+      return Number(farmFilter);
+    }
+    return farms[0]?.id || '';
+  };
+
   const [formData, setFormData] = useState({
-    farm_id: farms.length > 0 ? farms[0].id : '',
+    farm_id: getInitialFarmId(),
     crop: '',
     variety: '',
     area: '',
@@ -43,6 +53,16 @@ const CropCycles = () => {
     act_yield_qty: '',
     yield_unit: 'Maund'
   });
+
+  // Sync default farm_id when farms finish loading
+  useEffect(() => {
+    if (farms.length > 0 && !formData.farm_id) {
+      setFormData(prev => ({
+        ...prev,
+        farm_id: getInitialFarmId()
+      }));
+    }
+  }, [farms, farmFilter]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -76,85 +96,31 @@ const CropCycles = () => {
   const handleHarvest = (cycle) => {
     setEditingId(cycle.id);
     setFormData({
-      ...cycle,
-      status: 'Harvested',
+      farm_id: cycle.farm_id,
+      crop: cycle.crop || '',
+      variety: cycle.variety || '',
+      area: cycle.area || '',
+      sowing_date: cycle.sowing_date || '',
       harvest_date: new Date().toISOString().split('T')[0],
-      revenue: cycle.revenue?.toString() || ''
+      status: 'Harvested',
+      exp_yield: cycle.exp_yield || '',
+      act_yield: cycle.act_yield || '',
+      revenue: cycle.revenue?.toString() || '',
+      note: cycle.note || '',
+      area_acres: cycle.area_acres?.toString() || '',
+      plot_ids: cycle.plot_ids || (cycle.plot_id ? [cycle.plot_id] : []),
+      exp_yield_qty: cycle.exp_yield_qty?.toString() || '',
+      act_yield_qty: cycle.act_yield_qty?.toString() || '',
+      yield_unit: cycle.yield_unit || 'Maund'
     });
     setPlotSearchTerm('');
     setIsModalOpen(true);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    try {
-      if (editingId) {
-        const { error } = await supabase
-          .from('crop_cycles')
-          .update({
-            ...formData,
-            farm_id: parseInt(formData.farm_id),
-            sowing_date: formData.sowing_date || null,
-            harvest_date: formData.harvest_date || null,
-            revenue: formData.revenue ? parseFloat(formData.revenue) : 0,
-            area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
-            plot_ids: formData.plot_ids.length > 0 ? formData.plot_ids : null,
-            exp_yield_qty: formData.exp_yield_qty ? parseFloat(formData.exp_yield_qty) : null,
-            act_yield_qty: formData.act_yield_qty ? parseFloat(formData.act_yield_qty) : null,
-            yield_unit: formData.yield_unit || null
-          })
-          .eq('id', editingId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('crop_cycles').insert([{
-          ...formData,
-          farm_id: parseInt(formData.farm_id),
-          sowing_date: formData.sowing_date || null,
-          harvest_date: formData.harvest_date || null,
-          revenue: formData.revenue ? parseFloat(formData.revenue) : 0,
-          area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
-          plot_ids: formData.plot_ids.length > 0 ? formData.plot_ids : null,
-          exp_yield_qty: formData.exp_yield_qty ? parseFloat(formData.exp_yield_qty) : null,
-          act_yield_qty: formData.act_yield_qty ? parseFloat(formData.act_yield_qty) : null,
-          yield_unit: formData.yield_unit || null
-        }]);
-        if (error) throw error;
-      }
-      
-      await refetch();
-      setIsModalOpen(false);
-      setEditingId(null);
-      setFormData({
-        farm_id: farms.length > 0 ? farms[0].id : '',
-        crop: '',
-        variety: '',
-        area: '',
-        sowing_date: new Date().toISOString().split('T')[0],
-        harvest_date: '',
-        status: 'Sown',
-        exp_yield: '',
-        act_yield: '',
-        revenue: '',
-        note: '',
-        area_acres: '',
-        plot_ids: [],
-        exp_yield_qty: '',
-        act_yield_qty: '',
-        yield_unit: 'Maund'
-      });
-    } catch (error) {
-      console.error('Error saving crop cycle:', error);
-      toast.error('Error saving crop cycle: ' + error.message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const openAddModal = () => {
     setEditingId(null);
     setFormData({
-      farm_id: farms.length > 0 ? farms[0].id : '',
+      farm_id: getInitialFarmId(),
       crop: '',
       variety: '',
       area: '',
@@ -175,11 +141,78 @@ const CropCycles = () => {
     setIsModalOpen(true);
   };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const targetFarmId = formData.farm_id 
+        ? parseInt(formData.farm_id) 
+        : (farms.length > 0 ? farms[0].id : null);
+
+      if (!targetFarmId || isNaN(targetFarmId)) {
+        toast.error('Please select a valid farm. Create a farm first if none exist.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (!formData.crop?.trim()) {
+        toast.error('Please enter a crop name.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUserId = authData?.user?.id || null;
+
+      const payload = {
+        ...formData,
+        farm_id: targetFarmId,
+        crop: formData.crop.trim(),
+        sowing_date: formData.sowing_date || null,
+        harvest_date: formData.harvest_date || null,
+        revenue: formData.revenue ? parseFloat(formData.revenue) : 0,
+        area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
+        plot_ids: formData.plot_ids && formData.plot_ids.length > 0 ? formData.plot_ids : null,
+        exp_yield_qty: formData.exp_yield_qty ? parseFloat(formData.exp_yield_qty) : null,
+        act_yield_qty: formData.act_yield_qty ? parseFloat(formData.act_yield_qty) : null,
+        yield_unit: formData.yield_unit || null
+      };
+
+      if (currentUserId) {
+        payload.user_id = currentUserId;
+      }
+
+      if (editingId) {
+        const { error } = await supabase
+          .from('crop_cycles')
+          .update(payload)
+          .eq('id', editingId);
+        if (error) throw error;
+        toast.success('Crop cycle updated successfully');
+      } else {
+        const { error } = await supabase.from('crop_cycles').insert([payload]);
+        if (error) throw error;
+        toast.success('Crop cycle created successfully');
+      }
+      
+      await refetch();
+      setIsModalOpen(false);
+      setEditingId(null);
+      openAddModal();
+    } catch (error) {
+      console.error('Error saving crop cycle:', error);
+      toast.error('Error saving crop cycle: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleDelete = async (id) => {
-    if (!await confirmDialog('Are you sure you want to delete this crop cycle?')) return;
+    if (!await confirmDialog('Are you sure you want to delete this crop cycle? All associated expenses and logs will be preserved.')) return;
     try {
       const { error } = await supabase.from('crop_cycles').delete().eq('id', id);
       if (error) throw error;
+      toast.success('Crop cycle deleted');
       await refetch();
     } catch (error) {
       console.error('Error deleting crop cycle:', error);
@@ -354,14 +387,18 @@ const CropCycles = () => {
               <label className="agri-label">Farm</label>
               <select
                 name="farm_id"
-                value={formData.farm_id}
+                value={formData.farm_id || (farms[0]?.id ?? '')}
                 onChange={handleInputChange}
                 required
                 className="agri-input"
               >
-                {farms.map(farm => (
-                  <option key={farm.id} value={farm.id}>{farm.name}</option>
-                ))}
+                {farms.length === 0 ? (
+                  <option value="">No farms available</option>
+                ) : (
+                  farms.map(farm => (
+                    <option key={farm.id} value={farm.id}>{farm.name}</option>
+                  ))
+                )}
               </select>
             </div>
             <div className="flex flex-col gap-1">
@@ -501,6 +538,7 @@ const CropCycles = () => {
                 value={formData.area_acres}
                 onChange={handleInputChange}
                 step="0.01"
+                min="0"
                 placeholder="Auto"
                 className="agri-input"
               />
@@ -536,7 +574,7 @@ const CropCycles = () => {
             <div className="flex flex-col gap-1">
               <label className="agri-label">Expected Yield Qty</label>
               <div className="flex gap-2">
-                <input type="number" name="exp_yield_qty" value={formData.exp_yield_qty} onChange={handleInputChange} step="0.01" className="agri-input flex-1" />
+                <input type="number" name="exp_yield_qty" value={formData.exp_yield_qty} onChange={handleInputChange} step="0.01" min="0" className="agri-input flex-1" />
                 <select name="yield_unit" value={formData.yield_unit} onChange={handleInputChange} className="agri-input w-28">
                   <option value="Maund">Maund</option>
                   <option value="Kg">Kg</option>
@@ -548,7 +586,7 @@ const CropCycles = () => {
             <div className="flex flex-col gap-1">
               <label className="agri-label">Actual Yield Qty</label>
               <div className="flex gap-2">
-                <input type="number" name="act_yield_qty" value={formData.act_yield_qty} onChange={handleInputChange} step="0.01" className="agri-input flex-1" />
+                <input type="number" name="act_yield_qty" value={formData.act_yield_qty} onChange={handleInputChange} step="0.01" min="0" className="agri-input flex-1" />
                 <select name="yield_unit" value={formData.yield_unit} onChange={handleInputChange} className="agri-input w-28">
                   <option value="Maund">Maund</option>
                   <option value="Kg">Kg</option>
@@ -577,6 +615,7 @@ const CropCycles = () => {
                 name="revenue"
                 value={formData.revenue}
                 onChange={handleInputChange}
+                min="0"
                 placeholder="0.00"
                 className="agri-input"
               />
@@ -594,11 +633,17 @@ const CropCycles = () => {
             />
           </div>
 
+          {farms.length === 0 && (
+            <p className="text-xs text-error font-medium">
+              Please add at least one farm before creating a crop cycle.
+            </p>
+          )}
+
           <div className="pt-2 flex gap-3">
             <Button 
               type="button" 
               variant="outline" 
-              className="flex-1"
+              className="flex-1" 
               onClick={() => setIsModalOpen(false)}
             >
               Cancel
@@ -607,7 +652,7 @@ const CropCycles = () => {
               type="submit" 
               variant="primary" 
               className="flex-1"
-              disabled={isSubmitting}
+              disabled={isSubmitting || farms.length === 0}
             >
               {isSubmitting ? 'Saving...' : 'Save Cycle'}
             </Button>
@@ -619,4 +664,3 @@ const CropCycles = () => {
 };
 
 export default CropCycles;
-

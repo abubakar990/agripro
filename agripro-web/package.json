@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node tests/unit/run.js",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.20.0",
@@ -22,7 +24,7 @@
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.15.1",
     "recharts": "^3.8.1",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

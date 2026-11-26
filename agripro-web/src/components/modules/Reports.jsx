@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { IconFileDownload, IconPrinter, IconScale, IconReceipt, IconPackage, IconUsers } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
+import { creditOutstanding, loanOutstanding, toNumber as num } from '../../utils/finance';
 import Button from '../shared/Button';
 import * as XLSX from 'xlsx';
 
@@ -8,20 +9,27 @@ import {
   useRevenue, useExpenses, useFarms, useMachinery, 
   useLivestock, useInventory, useCreditEntries, useLoans 
 } from '../../hooks/queries';
-import { useFilteredData } from '../../hooks/useFilteredData';
+import { useFilteredData, useFarmFilteredData } from '../../hooks/useFilteredData';
 
 const Reports = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
-  const { data: farms = [] } = useFarms(currentOrgId);
-  const farmIds = farms.map(f => f.id);
+  const { data: allFarms = [] } = useFarms(currentOrgId);
+  const farmIds = allFarms.map(f => f.id);
 
+  // Revenue & expenses drive the P&L, which is period-based -> apply the global date filter.
   const revenue = useFilteredData(useRevenue(farmIds).data || []);
   const expenses = useFilteredData(useExpenses(farmIds).data || []);
-  const machinery = useFilteredData(useMachinery(farmIds).data || []);
-  const livestock = useFilteredData(useLivestock(farmIds).data || []);
-  const inventory = useFilteredData(useInventory(farmIds).data || []);
-  const creditEntries = useFilteredData(useCreditEntries(farmIds).data || []);
-  const loans = useFilteredData(useLoans(farmIds).data || []);
+  // Assets and outstanding balances are point-in-time: NEVER filter by date, otherwise
+  // undated assets and older receivables/payables/loans vanish whenever a range is active.
+  // They must still honour the farm filter though, or the balance sheet reports every farm
+  // while the P&L above it reports one — which is how this page came to disagree with the
+  // Dashboard.
+  const farms = useFarmFilteredData(allFarms, 'id');
+  const machinery = useFarmFilteredData(useMachinery(farmIds).data || []);
+  const livestock = useFarmFilteredData(useLivestock(farmIds).data || []);
+  const inventory = useFarmFilteredData(useInventory(farmIds).data || []);
+  const creditEntries = useFarmFilteredData(useCreditEntries(farmIds).data || []);
+  const loans = useFarmFilteredData(useLoans(farmIds).data || []);
 
   const [activeTab, setActiveTab] = useState('balance');
 
@@ -29,34 +37,23 @@ const Reports = () => {
     const totalRev = revenue.reduce((sum, r) => sum + Number(r.amount), 0);
     const totalExp = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
     
-    const getPaidAmount = (entry) => {
-      let total = 0;
-      if (entry.payments && entry.payments.length > 0) {
-        total += entry.payments.reduce((sum, p) => sum + Number(p.amount), 0);
-      } else {
-        total += Number(entry.paid) || 0;
-      }
-      if (entry.advance) {
-        total += Number(entry.advance);
-      }
-      return total;
-    };
-
+    // Balances go through the shared helpers rather than being re-derived here: a hand-rolled
+    // "total minus paid" skips the paisa rounding and lets this page drift from the Dashboard.
     const creditReceivable = creditEntries
       .filter(e => e.type === 'Credit Sale')
-      .reduce((sum, e) => sum + (Number(e.total_amount) - getPaidAmount(e)), 0);
+      .reduce((sum, e) => sum + creditOutstanding(e), 0);
 
     const loansReceivable = loans
       .filter(l => l.type === 'Lent')
-      .reduce((sum, l) => sum + (Number(l.principal) - getPaidAmount(l)), 0);
+      .reduce((sum, l) => sum + loanOutstanding(l), 0);
 
     const creditPayable = creditEntries
       .filter(e => e.type === 'Credit Purchase')
-      .reduce((sum, e) => sum + (Number(e.total_amount) - getPaidAmount(e)), 0);
+      .reduce((sum, e) => sum + creditOutstanding(e), 0);
 
     const loansPayable = loans
       .filter(l => l.type === 'Borrowed')
-      .reduce((sum, l) => sum + (Number(l.principal) - getPaidAmount(l)), 0);
+      .reduce((sum, l) => sum + loanOutstanding(l), 0);
 
     const machineryByCategory = machinery.reduce((acc, m) => {
       const cat = m.type || 'Uncategorized';
@@ -80,7 +77,8 @@ const Reports = () => {
     }, {});
 
     const assets = {
-      'Land Value': farms.reduce((sum, f) => sum + (Number(f.land_value) || 0), 0),
+      // land_value is stored per-acre (see Farms.jsx), so total = acres x per-acre value.
+      'Land Value': farms.reduce((sum, f) => sum + (num(f.area_acres) * num(f.land_value)), 0),
       ...machineryByCategory,
       ...livestockByCategory,
       ...inventoryByCategory,
@@ -120,14 +118,14 @@ const Reports = () => {
         id: `c-${e.id}`,
         party: e.party,
         type: 'Credit Sale',
-        amount: Number(e.total_amount) - getPaidAmount(e),
+        amount: creditOutstanding(e),
         dueDate: e.due_date
       })),
       ...loans.filter(l => l.type === 'Lent').map(l => ({
         id: `l-${l.id}`,
         party: l.party,
         type: 'Loan (Lent)',
-        amount: Number(l.principal) - getPaidAmount(l),
+        amount: loanOutstanding(l),
         dueDate: l.due_date
       }))
     ].filter(i => i.amount > 0);
@@ -137,14 +135,14 @@ const Reports = () => {
         id: `c-${e.id}`,
         party: e.party,
         type: 'Credit Purchase',
-        amount: Number(e.total_amount) - getPaidAmount(e),
+        amount: creditOutstanding(e),
         dueDate: e.due_date
       })),
       ...loans.filter(l => l.type === 'Borrowed').map(l => ({
         id: `l-${l.id}`,
         party: l.party,
         type: 'Loan (Borrowed)',
-        amount: Number(l.principal) - getPaidAmount(l),
+        amount: loanOutstanding(l),
         dueDate: l.due_date
       }))
     ].filter(i => i.amount > 0);

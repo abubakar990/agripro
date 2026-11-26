@@ -1,16 +1,23 @@
-import React, { useMemo, useState } from 'react';
-import { IconPlus, IconBuildingBank, IconTrendingUp, IconTrendingDown, IconAlertCircle, IconTrash } from '@tabler/icons-react';
+import { useMemo, useState, useEffect } from 'react';
+import { IconPlus, IconBuildingBank, IconTrendingUp, IconTrendingDown, IconTrash } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
+import { paidAmount, loanOutstanding, toNumber as num } from '../../utils/finance';
 import { supabase } from '../../lib/supabase';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
+import { useLoans, useFarms } from '../../hooks/queries';
+import { useFarmFilteredData } from '../../hooks/useFilteredData';
+import { useGlobalStore } from '../../store/globalStore';
+import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const LoanCard = ({ loan, farm, onRecordRepayment, refetch }) => {
   const [isDeleting, setIsDeleting] = useState(false);
-  const paid = loan.payments?.reduce((sum, p) => sum + p.amount, 0) || loan.paid || 0;
-  const remaining = loan.principal - paid;
-  const progress = loan.principal > 0 ? (paid / loan.principal) * 100 : 0;
+  const paid = paidAmount(loan);
+  const remaining = loanOutstanding(loan);
+  const principal = num(loan.principal);
+  const progress = principal > 0 ? Math.min(100, (paid / principal) * 100) : 0;
   const isOverdue = loan.due_date && new Date(loan.due_date) < new Date() && remaining > 0;
 
   const handleDelete = async () => {
@@ -24,6 +31,7 @@ const LoanCard = ({ loan, farm, onRecordRepayment, refetch }) => {
         .eq('id', loan.id);
       
       if (error) throw error;
+      toast.success('Loan entry deleted');
       await refetch();
     } catch (error) {
       console.error('Error deleting loan entry:', error.message);
@@ -94,7 +102,7 @@ const LoanCard = ({ loan, farm, onRecordRepayment, refetch }) => {
         </div>
 
         <div className="flex justify-between items-center text-[11px]">
-          <span className="text-text-muted font-bold">DUE: {formatDate(loan.due_date)}</span>
+          <span className="text-text-muted font-bold">DUE: {loan.due_date ? formatDate(loan.due_date) : 'No Due Date'}</span>
           {isOverdue && (
             <Badge variant="danger" className="animate-pulse">OVERDUE</Badge>
           )}
@@ -122,25 +130,30 @@ const LoanCard = ({ loan, farm, onRecordRepayment, refetch }) => {
   );
 };
 
-import { useLoans, useFarms } from '../../hooks/queries';
-import { useFilteredData } from '../../hooks/useFilteredData';
-import { toast } from '../../utils/toast';
-import { confirmDialog } from '../../utils/confirmDialog';
-
 const Loans = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
+  const farmFilter = useGlobalStore(state => state.farmFilter);
   const { data: farms = [] } = useFarms(currentOrgId);
   const farmIds = farms.map(f => f.id);
   
   const { data: rawLoans = [], isLoading, refetch } = useLoans(farmIds);
-  const loans = useFilteredData(rawLoans);
+  // Outstanding debt is point-in-time: filtering by the date the loan was taken out
+  // would make older active loans disappear from the totals.
+  const loans = useFarmFilteredData(rawLoans);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRepaymentModalOpen, setIsRepaymentModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState(null);
+
+  const getInitialFarmId = () => {
+    if (farmFilter !== 'all' && farms.some(f => String(f.id) === String(farmFilter))) {
+      return Number(farmFilter);
+    }
+    return farms[0]?.id || '';
+  };
   
   const [formData, setFormData] = useState({
-    farm_id: farms.length > 0 ? farms[0].id : '',
+    farm_id: getInitialFarmId(),
     date: new Date().toISOString().split('T')[0],
     type: 'Borrowed',
     party: '',
@@ -153,6 +166,16 @@ const Loans = () => {
     note: ''
   });
 
+  // Sync default farm_id once farms finish loading asynchronously
+  useEffect(() => {
+    if (farms.length > 0 && !formData.farm_id) {
+      setFormData(prev => ({
+        ...prev,
+        farm_id: getInitialFarmId()
+      }));
+    }
+  }, [farms, farmFilter]);
+
   const [repaymentData, setRepaymentData] = useState({
     date: new Date().toISOString().split('T')[0],
     amount: '',
@@ -160,56 +183,90 @@ const Loans = () => {
   });
 
   const stats = useMemo(() => {
-    const totalBorrowed = loans.filter(l => l.type === 'Borrowed').reduce((s, l) => {
-      const paid = l.payments?.reduce((sum, p) => sum + p.amount, 0) || l.paid || 0;
-      return s + (l.principal - paid);
-    }, 0);
-    const totalLent = loans.filter(l => l.type === 'Lent').reduce((s, l) => {
-      const paid = l.payments?.reduce((sum, p) => sum + p.amount, 0) || l.paid || 0;
-      return s + (l.principal - paid);
-    }, 0);
-    const repaid = loans.filter(l => l.type === 'Borrowed').reduce((s, l) => {
-      const paid = l.payments?.reduce((sum, p) => sum + p.amount, 0) || l.paid || 0;
-      return s + paid;
-    }, 0);
+    const totalBorrowed = loans
+      .filter(l => l.type === 'Borrowed')
+      .reduce((s, l) => s + loanOutstanding(l), 0);
+    const totalLent = loans
+      .filter(l => l.type === 'Lent')
+      .reduce((s, l) => s + loanOutstanding(l), 0);
+    const repaid = loans
+      .filter(l => l.type === 'Borrowed')
+      .reduce((s, l) => s + paidAmount(l), 0);
     
     return { totalBorrowed, totalLent, repaid };
   }, [loans]);
+
+  const openAddModal = () => {
+    setFormData({
+      farm_id: getInitialFarmId(),
+      date: new Date().toISOString().split('T')[0],
+      type: 'Borrowed',
+      party: '',
+      purpose: '',
+      principal: '',
+      interest_rate: '0',
+      tenure_months: '0',
+      monthly_install: '0',
+      due_date: '',
+      note: ''
+    });
+    setIsModalOpen(true);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
+      const targetFarmId = formData.farm_id 
+        ? parseInt(formData.farm_id) 
+        : (farms.length > 0 ? farms[0].id : null);
+
+      if (!targetFarmId || isNaN(targetFarmId)) {
+        toast.error('Please select a valid farm. Create a farm first if none exist.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const principalAmount = parseFloat(formData.principal);
+      if (isNaN(principalAmount) || principalAmount <= 0) {
+        toast.error('Please enter a valid principal amount.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUserId = authData?.user?.id || null;
+
+      const payload = {
+        farm_id: targetFarmId,
+        date: formData.date || new Date().toISOString().split('T')[0],
+        type: formData.type || 'Borrowed',
+        party: formData.party?.trim() || '',
+        purpose: formData.purpose?.trim() || '',
+        principal: principalAmount,
+        interest_rate: parseFloat(formData.interest_rate) || 0,
+        tenure_months: parseInt(formData.tenure_months) || 0,
+        monthly_install: parseFloat(formData.monthly_install) || 0,
+        due_date: formData.due_date ? formData.due_date : null,
+        note: formData.note ? formData.note.trim() : null,
+        status: 'Active'
+      };
+
+      if (currentUserId) {
+        payload.user_id = currentUserId;
+      }
+
       const { error } = await supabase
         .from('loans')
-        .insert([{
-          ...formData,
-          farm_id: parseInt(formData.farm_id),
-          principal: parseFloat(formData.principal) || 0,
-          interest_rate: parseFloat(formData.interest_rate) || 0,
-          tenure_months: parseInt(formData.tenure_months) || 0,
-          monthly_install: parseFloat(formData.monthly_install) || 0,
-          paid: 0
-        }]);
+        .insert([payload]);
 
       if (error) throw error;
       
+      toast.success('Loan entry added successfully');
       await refetch();
       setIsModalOpen(false);
-      setFormData({
-        farm_id: farms.length > 0 ? farms[0].id : '',
-        date: new Date().toISOString().split('T')[0],
-        type: 'Borrowed',
-        party: '',
-        purpose: '',
-        principal: '',
-        interest_rate: '0',
-        tenure_months: '0',
-        monthly_install: '0',
-        due_date: '',
-        note: ''
-      });
+      openAddModal();
     } catch (error) {
       console.error('Error adding loan:', error.message);
       toast.error('Error adding loan: ' + error.message);
@@ -234,29 +291,40 @@ const Loans = () => {
 
     try {
       const amount = parseFloat(repaymentData.amount) || 0;
+      if (amount <= 0) {
+        toast.error('Please enter a valid repayment amount.');
+        setIsSubmitting(false);
+        return;
+      }
       
-      // 1. Insert into loan_payments
+      // loan_payments is the single source of truth for repayments. There used to be a
+      // second write here that mirrored the running total into a denormalized loans.paid
+      // column, but that column no longer exists in the database: the update threw, so the
+      // user saw an error toast for a payment that had in fact just been saved, and
+      // retrying inserted a duplicate payment row. finance.paidAmount() sums the payment
+      // rows, so nothing needs to be denormalized.
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUserId = authData?.user?.id || null;
+
+      const paymentPayload = {
+        loan_id: selectedLoan.id,
+        date: repaymentData.date,
+        amount: amount,
+        note: repaymentData.note ? repaymentData.note.trim() : null
+      };
+
+      if (currentUserId) {
+        paymentPayload.user_id = currentUserId;
+      }
+
       const { error: paymentError } = await supabase
         .from('loan_payments')
-        .insert([{
-          loan_id: selectedLoan.id,
-          date: repaymentData.date,
-          amount: amount,
-          note: repaymentData.note
-        }]);
+        .insert([paymentPayload]);
 
       if (paymentError) throw paymentError;
 
-      // 2. Update paid amount on loan table (legacy support)
-      const newPaidAmount = (selectedLoan.paid || 0) + amount;
-      const { error: updateError } = await supabase
-        .from('loans')
-        .update({ paid: newPaidAmount })
-        .eq('id', selectedLoan.id);
-
-      if (updateError) throw updateError;
-      
       await refetch();
+      toast.success('Repayment recorded');
       setIsRepaymentModalOpen(false);
       setSelectedLoan(null);
     } catch (error) {
@@ -282,7 +350,7 @@ const Loans = () => {
           <h2 className="text-xl font-bold text-text-primary">Loans & Borrowed</h2>
           <p className="text-sm text-text-muted">Track your liabilities and receivables.</p>
         </div>
-        <Button variant="primary" onClick={() => setIsModalOpen(true)}>
+        <Button variant="primary" onClick={openAddModal}>
           <IconPlus size={18} />
           Record New Loan
         </Button>
@@ -341,11 +409,15 @@ const Loans = () => {
               <label className="agri-label">Select Farm</label>
               <select 
                 className="agri-input"
-                value={formData.farm_id}
+                value={formData.farm_id || (farms[0]?.id ?? '')}
                 onChange={e => setFormData({...formData, farm_id: e.target.value})}
                 required
               >
-                {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                {farms.length === 0 ? (
+                  <option value="">No farms available</option>
+                ) : (
+                  farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)
+                )}
               </select>
             </div>
             <div>
@@ -430,16 +502,30 @@ const Loans = () => {
               />
             </div>
             <div className="col-span-2">
-              <label className="agri-label">Due Date</label>
+              <label className="agri-label">Due Date (Optional)</label>
               <input 
                 type="date" 
                 className="agri-input"
                 value={formData.due_date}
                 onChange={e => setFormData({...formData, due_date: e.target.value})}
-                required
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="agri-label">Note (Optional)</label>
+              <textarea 
+                className="agri-input" 
+                placeholder="Reference, terms, or collateral details..."
+                rows="2"
+                value={formData.note}
+                onChange={e => setFormData({...formData, note: e.target.value})}
               />
             </div>
           </div>
+          {farms.length === 0 && (
+            <p className="text-xs text-error font-medium">
+              Please add at least one farm before recording a loan.
+            </p>
+          )}
           <div className="flex gap-3 pt-2">
             <Button 
               type="button" 
@@ -453,7 +539,7 @@ const Loans = () => {
               type="submit" 
               variant="primary" 
               className="flex-1"
-              disabled={isSubmitting}
+              disabled={isSubmitting || farms.length === 0}
             >
               {isSubmitting ? 'Saving...' : 'Save Loan'}
             </Button>

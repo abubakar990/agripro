@@ -1,5 +1,3 @@
-import React from 'react';
-
 const Badge = ({ children, variant = 'info', className = '' }) => {
   const variants = {
     info: 'bg-accent-blue bg-opacity-10 text-accent-blue',

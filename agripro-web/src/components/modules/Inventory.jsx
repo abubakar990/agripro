@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { IconPlus, IconBox, IconAlertTriangle, IconPackageImport, IconCoins, IconTrash, IconEdit } from '@tabler/icons-react';
+import { useMemo, useState, useEffect } from 'react';
+import { IconPlus, IconBox, IconAlertTriangle, IconCoins, IconTrash, IconEdit } from '@tabler/icons-react';
 import { formatPKR, formatNumber } from '../../utils/format';
 import { supabase } from '../../lib/supabase';
 import Button from '../shared/Button';
@@ -7,7 +7,8 @@ import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 
 import { useInventory, useCategories, useFarms } from '../../hooks/queries';
-import { useFilteredData } from '../../hooks/useFilteredData';
+import { useFarmFilteredData } from '../../hooks/useFilteredData';
+import { useGlobalStore } from '../../store/globalStore';
 import { toast } from '../../utils/toast';
 import { confirmDialog } from '../../utils/confirmDialog';
 
@@ -15,9 +16,11 @@ const Inventory = ({ user }) => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
   const { data: farms = [] } = useFarms(currentOrgId);
   const farmIds = farms.map(f => f.id);
+  const farmFilter = useGlobalStore(state => state.farmFilter);
 
   const { data: rawInventory = [], isLoading, refetch } = useInventory(farmIds);
-  const inventory = useFilteredData(rawInventory);
+  // Stock on hand is point-in-time, not a period figure: never date-filter it.
+  const inventory = useFarmFilteredData(rawInventory);
 
   const { data: allCategories = [] } = useCategories(currentOrgId);
   const categories = allCategories.filter(c => c.module === 'inventory');
@@ -28,7 +31,7 @@ const Inventory = ({ user }) => {
   const [editingId, setEditingId] = useState(null);
   const [customCategory, setCustomCategory] = useState('');
   const [formData, setFormData] = useState({
-    farm_id: farms[0]?.id || '',
+    farm_id: (farmFilter && farmFilter !== 'all') ? farmFilter : (farms[0]?.id || ''),
     item: '',
     category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
     qty: '',
@@ -36,6 +39,15 @@ const Inventory = ({ user }) => {
     reorder_level: '',
     value: ''
   });
+
+  useEffect(() => {
+    if (!formData.farm_id && farms.length > 0) {
+      const defaultFarm = (farmFilter && farmFilter !== 'all')
+        ? farmFilter
+        : farms[0].id;
+      setFormData(prev => ({ ...prev, farm_id: defaultFarm }));
+    }
+  }, [farms, farmFilter]);
 
   const stats = useMemo(() => {
     const totalItems = inventory.length;
@@ -70,22 +82,47 @@ const Inventory = ({ user }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitting(true);
 
+    if (farms.length === 0) {
+      toast.error('Please create a farm first before adding inventory items');
+      return;
+    }
+
+    const targetFarmId = formData.farm_id 
+      ? parseInt(formData.farm_id) 
+      : (farmFilter && farmFilter !== 'all' ? parseInt(farmFilter) : (farms.length > 0 ? farms[0].id : null));
+
+    if (!targetFarmId || isNaN(targetFarmId)) {
+      toast.error('Please select a valid farm');
+      return;
+    }
+
+    if (!formData.item || !formData.item.trim()) {
+      toast.error('Please enter an item name');
+      return;
+    }
+
+    setIsSubmitting(true);
     let finalCategory = formData.category;
 
     try {
       if (formData.category === 'ADD_NEW') {
+        if (!customCategory.trim()) {
+          toast.error('Please enter a new category name');
+          setIsSubmitting(false);
+          return;
+        }
         const { error: catError } = await supabase
           .from('categories')
-          .insert([{ 
-            name: customCategory, 
+          .insert([{
+            name: customCategory.trim(),
             module: 'inventory',
-            user_id: user?.id 
+            user_id: user?.id,
+            org_id: currentOrgId
           }]);
         
         if (catError && catError.code !== '23505') throw catError;
-        finalCategory = customCategory;
+        finalCategory = customCategory.trim();
       }
 
       if (editingId) {
@@ -93,34 +130,42 @@ const Inventory = ({ user }) => {
           .from('inventory')
           .update({
             ...formData,
+            item: formData.item.trim(),
             category: finalCategory,
-            farm_id: parseInt(formData.farm_id),
+            farm_id: targetFarmId,
             qty: parseFloat(formData.qty) || 0,
             reorder_level: parseFloat(formData.reorder_level) || 0,
             value: parseFloat(formData.value) || 0
           })
           .eq('id', editingId);
         if (error) throw error;
+        toast.success('Inventory item updated successfully');
       } else {
         const { error } = await supabase
           .from('inventory')
           .insert([{
             ...formData,
+            item: formData.item.trim(),
             category: finalCategory,
-            farm_id: parseInt(formData.farm_id),
+            farm_id: targetFarmId,
+            user_id: user?.id,
             qty: parseFloat(formData.qty) || 0,
             reorder_level: parseFloat(formData.reorder_level) || 0,
             value: parseFloat(formData.value) || 0
           }]);
         if (error) throw error;
+        toast.success('Inventory item added successfully');
       }
 
       await refetch();
       setIsModalOpen(false);
       setEditingId(null);
       setCustomCategory('');
+      const defaultFarm = (farmFilter && farmFilter !== 'all')
+        ? farmFilter
+        : (farms.length > 0 ? farms[0].id : '');
       setFormData({
-        farm_id: farms[0]?.id || '',
+        farm_id: defaultFarm,
         item: '',
         category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
         qty: '',
@@ -139,8 +184,11 @@ const Inventory = ({ user }) => {
   const openAddModal = () => {
     setEditingId(null);
     setCustomCategory('');
+    const defaultFarm = (farmFilter && farmFilter !== 'all')
+      ? farmFilter
+      : (farms.length > 0 ? farms[0].id : '');
     setFormData({
-      farm_id: farms[0]?.id || '',
+      farm_id: defaultFarm,
       item: '',
       category: categories.length > 0 ? categories[0].name : 'ADD_NEW',
       qty: '',
@@ -158,6 +206,7 @@ const Inventory = ({ user }) => {
     try {
       const { error } = await supabase.from('inventory').delete().eq('id', item.id);
       if (error) throw error;
+      toast.success('Inventory item deleted successfully');
       await refetch();
     } catch (error) {
       console.error('Error deleting inventory item:', error.message);
@@ -245,7 +294,7 @@ const Inventory = ({ user }) => {
                 const farm = farms.find(f => f.id === item.farm_id);
                 const isOut = item.qty === 0;
                 const isLow = item.qty <= item.reorder_level && !isOut;
-                
+
                 return (
                   <tr key={item.id} className={`agri-table-row ${isOut ? 'bg-red-50' : isLow ? 'bg-amber-50' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -303,10 +352,11 @@ const Inventory = ({ user }) => {
               <label className="agri-label">Select Farm</label>
               <select 
                 className="agri-input"
-                value={formData.farm_id}
+                value={formData.farm_id || (farms.length > 0 ? farms[0].id : '')}
                 onChange={e => setFormData({...formData, farm_id: e.target.value})}
                 required
               >
+                {farms.length === 0 && <option value="">No farms available</option>}
                 {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </div>
@@ -362,9 +412,10 @@ const Inventory = ({ user }) => {
             </div>
             <div>
               <label className="agri-label">Quantity</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
                 step="0.01"
+                min="0"
                 className="agri-input"
                 value={formData.qty}
                 onChange={e => setFormData({...formData, qty: e.target.value})}
@@ -373,9 +424,10 @@ const Inventory = ({ user }) => {
             </div>
             <div>
               <label className="agri-label">Reorder Level</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
                 step="0.01"
+                min="0"
                 className="agri-input"
                 value={formData.reorder_level}
                 onChange={e => setFormData({...formData, reorder_level: e.target.value})}
@@ -384,8 +436,9 @@ const Inventory = ({ user }) => {
             </div>
             <div className="col-span-2">
               <label className="agri-label">Total Value (PKR)</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
+                min="0"
                 className="agri-input"
                 value={formData.value}
                 onChange={e => setFormData({...formData, value: e.target.value})}
@@ -406,7 +459,7 @@ const Inventory = ({ user }) => {
               type="submit" 
               variant="primary" 
               className="flex-1"
-              disabled={isSubmitting}
+              disabled={isSubmitting || farms.length === 0}
             >
               {isSubmitting ? 'Saving...' : 'Save Item'}
             </Button>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { IconPlant, IconMail, IconLock, IconLoader2, IconUser } from '@tabler/icons-react';
 import Button from '../shared/Button';
@@ -11,31 +11,55 @@ const Auth = () => {
   const [fullName, setFullName] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
 
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setNotice(null);
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ 
-          email, 
+        const { data, error } = await supabase.auth.signUp({
+          email,
           password,
           options: {
+            emailRedirectTo: window.location.origin,
             data: {
               full_name: fullName
             }
           }
         });
         if (error) throw error;
-        toast.info('Check your email for the confirmation link!');
+
+        if (data.session) {
+          // Email confirmation is switched off: the user is already signed in and
+          // onAuthStateChange will swap this screen out. Nothing to announce.
+          return;
+        }
+
+        // Supabase hides whether an address is already registered, returning a user with
+        // no identities instead of an error. Surface that as its own message rather than
+        // telling someone to check an inbox that will stay empty.
+        const alreadyRegistered = data.user && (data.user.identities?.length ?? 0) === 0;
+        setNotice(
+          alreadyRegistered
+            ? `An account already exists for ${email}. Try signing in, or reset your password.`
+            : `Account created. We sent a confirmation link to ${email} — click it, then sign in. Check your spam folder if it does not arrive within a few minutes.`
+        );
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
     } catch (err) {
-      setError(err.message);
+      // Unconfirmed accounts fail sign-in with a message that does not explain the fix.
+      if (/email not confirmed/i.test(err.message)) {
+        setError('This email has not been confirmed yet. Please click the confirmation link we sent you, then try again.');
+      } else {
+        setError(err.message);
+      }
+      toast.error(err.message);
     } finally {
       setLoading(false);
     }
@@ -59,20 +83,27 @@ const Auth = () => {
 
           <form onSubmit={handleAuth} className="space-y-4">
             {error && (
-              <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-expense text-xs font-bold animate-in fade-in zoom-in duration-200">
+              <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-100 text-expense text-xs font-bold animate-in fade-in zoom-in duration-200">
                 {error}
+              </div>
+            )}
+
+            {notice && (
+              <div role="status" className="p-3 rounded-lg bg-green-50 border border-green-100 text-green-800 text-xs font-bold animate-in fade-in zoom-in duration-200">
+                {notice}
               </div>
             )}
 
             {isSignUp && (
               <div className="space-y-1">
-                <label className="agri-label">Full Name</label>
+                <label htmlFor="auth-fullname" className="agri-label">Full Name</label>
                 <div className="relative h-11">
-                  <IconUser 
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" 
-                    size={20} 
+                  <IconUser
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+                    size={20}
                   />
                   <input
+                    id="auth-fullname"
                     type="text"
                     className="agri-input pl-10 h-full"
                     placeholder="Enter your name"
@@ -85,13 +116,14 @@ const Auth = () => {
             )}
 
             <div className="space-y-1">
-              <label className="agri-label">Email Address</label>
+              <label htmlFor="auth-email" className="agri-label">Email Address</label>
               <div className="relative h-11">
-                <IconMail 
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" 
-                  size={20} 
+                <IconMail
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+                  size={20}
                 />
                 <input
+                  id="auth-email"
                   type="email"
                   className="agri-input pl-10 h-full"
                   placeholder="name@example.com"
@@ -103,13 +135,14 @@ const Auth = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="agri-label">Password</label>
+              <label htmlFor="auth-password" className="agri-label">Password</label>
               <div className="relative h-11">
-                <IconLock 
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" 
-                  size={20} 
+                <IconLock
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+                  size={20}
                 />
                 <input
+                  id="auth-password"
                   type="password"
                   className="agri-input pl-10 h-full"
                   placeholder="••••••••"
@@ -136,7 +169,7 @@ const Auth = () => {
 
           <div className="mt-6 text-center">
             <button
-              onClick={() => setIsSignUp(!isSignUp)}
+              onClick={() => { setIsSignUp(!isSignUp); setError(null); setNotice(null); }}
               className="text-sm font-bold text-primary hover:underline"
             >
               {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}

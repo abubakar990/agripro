@@ -78,8 +78,7 @@ export function useSupabaseData(session, preferredOrgId) {
   };
 
   useEffect(() => {
-    let fetchTimeout;
-    
+    /* eslint-disable react-hooks/set-state-in-effect -- intentional data fetch: syncs Supabase data into React state on session/org change */
     if (session) {
       fetchData();
     } else {
@@ -93,6 +92,9 @@ export function useSupabaseData(session, preferredOrgId) {
       });
       setLoading(false);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
+    // fetchData is a stable closure recreated each render; excluding it avoids a refetch loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, preferredOrgId]);
 
   return { ...data, loading, refetch: fetchData };

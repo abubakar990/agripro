@@ -23,7 +23,7 @@ export default {
         text: {
           primary: '#1a1a1a',
           secondary: '#666666',
-          muted: '#999999',
+          muted: '#6b6b6b', // Darkened for WCAG AA contrast on body text
         }
       },
       fontFamily: {

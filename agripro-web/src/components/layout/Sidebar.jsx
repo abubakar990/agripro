@@ -24,7 +24,7 @@ import {
   IconX
 } from '@tabler/icons-react';
 
-const Sidebar = ({ isCollapsed, setIsCollapsed, creditEntries = [], organizations = [], currentOrg, user, isSystemAdmin, onClose }) => {
+const Sidebar = ({ isCollapsed, setIsCollapsed, creditEntries = [], currentOrg, isSystemAdmin, onClose }) => {
   const overdueCount = React.useMemo(() => {
     const today = new Date();
     return creditEntries.filter(entry => {
@@ -111,15 +111,17 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, creditEntries = [], organization
           </div>
         )}
         <div className="flex items-center">
-          <button 
+          <button
             onClick={() => setIsCollapsed(!isCollapsed)}
+            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             className="text-white hover:bg-white hover:bg-opacity-10 rounded-md p-2 flex-shrink-0 hidden lg:block"
           >
             {isCollapsed ? <IconChevronRight size={18} /> : <IconChevronLeft size={18} />}
           </button>
           {/* Mobile Close Button */}
-          <button 
+          <button
             onClick={onClose}
+            aria-label="Close menu"
             className="text-white hover:bg-white hover:bg-opacity-10 rounded-md p-2 flex-shrink-0 lg:hidden"
           >
             <IconX size={24} />
@@ -140,6 +142,8 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, creditEntries = [], organization
                 <NavLink
                   key={itemIdx}
                   to={item.path}
+                  title={isCollapsed ? item.name : undefined}
+                  aria-label={isCollapsed ? item.name : undefined}
                   onClick={() => {
                     if (window.innerWidth < 1024) onClose();
                   }}

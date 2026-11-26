@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { IconBuildingCommunity, IconEdit, IconLoader2, IconCircleCheck, IconCalendarTime } from '@tabler/icons-react';
+import { useState } from 'react';
+import { IconBuildingCommunity, IconEdit, IconLoader2, IconCircleCheck, IconCalendarTime, IconAlertCircle } from '@tabler/icons-react';
 import Button from '../../shared/Button';
 import { supabase } from '../../../lib/supabase';
 
@@ -50,8 +50,9 @@ const OrgSettings = ({ currentOrg, user, refetch }) => {
             <div>
               {isEditing ? (
                 <form onSubmit={handleUpdateName} className="flex flex-col gap-2">
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
+                    aria-label="Organization name"
                     className="agri-input font-bold text-lg"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
@@ -70,8 +71,10 @@ const OrgSettings = ({ currentOrg, user, refetch }) => {
                 <div className="flex items-center gap-3">
                   <h3 className="text-2xl font-bold text-text-primary">{currentOrg?.name}</h3>
                   {isOwner && (
-                    <button 
+                    <button
                       onClick={() => setIsEditing(true)}
+                      aria-label="Edit organization name"
+                      title="Edit organization name"
                       className="text-text-muted hover:text-primary p-1.5 rounded-full hover:bg-bg transition-all"
                     >
                       <IconEdit size={18} />
@@ -91,7 +94,7 @@ const OrgSettings = ({ currentOrg, user, refetch }) => {
 
         {message && (
           <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-            {message.type === 'success' ? <IconCircleCheck size={20} /> : <IconCircleCheck size={20} className="rotate-45" />}
+            {message.type === 'success' ? <IconCircleCheck size={20} /> : <IconAlertCircle size={20} />}
             <span className="text-sm font-medium">{message.text}</span>
           </div>
         )}

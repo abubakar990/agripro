@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { IconCreditCard, IconCircleCheck, IconLock, IconLoader2, IconExternalLink } from '@tabler/icons-react';
+import { useState } from 'react';
+import { IconCircleCheck, IconLock, IconLoader2, IconExternalLink } from '@tabler/icons-react';
 import Button from '../../shared/Button';
 import Badge from '../../shared/Badge';
 import { supabase } from '../../../lib/supabase';

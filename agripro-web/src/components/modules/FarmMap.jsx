@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Polygon, Popup, useMap, useMapEvents } from 'react-leaflet';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { MapContainer, TileLayer, Polygon, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import '@geoman-io/leaflet-geoman-free';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -9,7 +9,6 @@ import { getPlotScore, getScoreColor, getScoreLabel } from '../../utils/perAcreC
 import { formatPKR } from '../../utils/format';
 import Modal from '../shared/Modal';
 import Button from '../shared/Button';
-import Badge from '../shared/Badge';
 import { IconMap, IconPlus, IconArrowLeft, IconSearch, IconLayersIntersect, IconMapPin, IconLayoutSidebarRightCollapse, IconLayoutSidebarRightExpand, IconSquarePlus, IconDeviceFloppy, IconTrash, IconEdit, IconDragDrop, IconCheck, IconBuildingCommunity, IconRotate, IconGridDots, IconCut, IconVectorTriangle, IconList, IconArrowBackUp, IconArrowForwardUp } from '@tabler/icons-react';
 import { useFarms, useFarmPlots, useCropCycles, useExpenses, useRevenue, useAcrePresets } from '../../hooks/queries';
 import { toast } from '../../utils/toast';
@@ -230,7 +229,7 @@ const FarmMap = () => {
            // Return early so we don't pop the global stack while actively drawing
            return;
         }
-      } catch(e) {}
+      } catch { /* intentionally ignored */ }
     }
 
     if (undoStack.length === 0) return;
@@ -335,7 +334,7 @@ const FarmMap = () => {
                   if (l) totalAcres += calculateAcresFromLatLngs(l.getLatLngs()[0]);
                 });
                 setDynamicAreaAcres(totalAcres);
-              } catch(e) {}
+              } catch { /* intentionally ignored */ }
             };
             layer.on('pm:markerdrag', updateArea);
             layer.on('pm:edit', updateArea);
@@ -350,6 +349,7 @@ const FarmMap = () => {
             layer.off('pm:edit');
           }
         });
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- sync drawn area state with map editing mode
         if (!adjustingPlotId) setDynamicAreaAcres(null);
       }
     }
@@ -373,6 +373,7 @@ const FarmMap = () => {
       }, 100); // debounce slightly
       return () => clearTimeout(timer);
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear grid preview when leaving preview mode
       setGridPreviewPlots([]);
     }
   }, [isDrawMode, gridParams, farm?.boundary]);
@@ -395,13 +396,14 @@ const FarmMap = () => {
           try {
             const acres = calculateAcresFromLatLngs(layer.getLatLngs()[0]);
             setDynamicAreaAcres(acres);
-          } catch(e) {}
+          } catch { /* intentionally ignored */ }
         };
         layer.on('pm:markerdrag', updateArea);
         layer.on('pm:edit', updateArea);
         updateArea();
       }
     } else if (!adjustingFarmBoundary) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync drawn area state with plot adjustment mode
       setDynamicAreaAcres(null);
     }
     return () => {
@@ -1301,7 +1303,7 @@ const FarmMap = () => {
                   }
                   return null;
                 });
-              } catch (e) {}
+              } catch { /* intentionally ignored */ }
               return null;
             })()}
 
@@ -1317,7 +1319,7 @@ const FarmMap = () => {
                     pathOptions={{ color: '#f59e0b', weight: 2, dashArray: '4, 4', fillColor: '#f59e0b', fillOpacity: 0.3 }}
                   />
                 );
-              } catch (e) { return null; }
+              } catch { return null; }
             })}
 
             {/* Render Actual Plots (Only when not previewing a replacement grid to avoid mess) */}
@@ -1394,7 +1396,7 @@ const FarmMap = () => {
                     </Popup>
                   </Polygon>
                 );
-              } catch (e) { return null; }
+              } catch { return null; }
             })}
           </MapContainer>
         </div>
@@ -1467,7 +1469,7 @@ const FarmMap = () => {
                               try {
                                 const bounds = L.geoJSON({ type: 'Feature', geometry: f.geometry }).getBounds();
                                 if (bounds.isValid()) mapRef.current.fitBounds(bounds, { padding: [30, 30] });
-                              } catch(e) {}
+                              } catch { /* intentionally ignored */ }
                             }
                           }}
                           title="Click to zoom"
@@ -1567,7 +1569,7 @@ const FarmMap = () => {
                             try {
                               const bounds = L.geoJSON({ type: 'Feature', geometry: plot.boundary }).getBounds();
                               if (bounds.isValid()) mapRef.current.fitBounds(bounds, { padding: [40, 40] });
-                            } catch(e) {}
+                            } catch { /* intentionally ignored */ }
                           }
                         }}
                         className={`

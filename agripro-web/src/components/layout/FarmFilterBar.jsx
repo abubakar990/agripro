@@ -1,4 +1,3 @@
-import React from 'react';
 import { IconCalendar } from '@tabler/icons-react';
 
 const FarmFilterBar = ({ farms, farmFilter, setFarmFilter, dateRange, setDateRange, customRange, setCustomRange }) => {

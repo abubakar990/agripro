@@ -1,8 +1,7 @@
-import React, { useState, useMemo } from 'react';
-import { IconPlus, IconTrendingUp, IconTrendingDown, IconBuildingStore, IconCalendar, IconTrash } from '@tabler/icons-react';
+import { useState, useMemo } from 'react';
+import { IconPlus, IconTrendingUp, IconTrash } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
 import Button from '../shared/Button';
-import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
@@ -30,15 +29,39 @@ const MandiPrices = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error('You must be logged in to record mandi prices');
+      return;
+    }
+
+    if (!formData.commodity || !formData.commodity.trim()) {
+      toast.error('Please enter a commodity name');
+      return;
+    }
+
+    const priceNum = parseFloat(formData.price);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      toast.error('Please enter a valid price greater than 0');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      const entryDate = formData.date ? formData.date : new Date().toISOString().split('T')[0];
       const { error } = await supabase.from('mandi_prices').insert([{
-        ...formData,
-        price: parseFloat(formData.price) || 0
+        date: entryDate,
+        commodity: formData.commodity.trim(),
+        price: priceNum,
+        unit: formData.unit,
+        market: formData.market ? formData.market.trim() : '',
+        user_id: user.id
       }]);
       
       if (error) throw error;
       
+      toast.success('Mandi price recorded successfully');
       await refetch();
       setIsModalOpen(false);
       setFormData({
@@ -61,6 +84,7 @@ const MandiPrices = () => {
     try {
       const { error } = await supabase.from('mandi_prices').delete().eq('id', id);
       if (error) throw error;
+      toast.success('Mandi price record deleted successfully');
       await refetch();
     } catch (error) {
       console.error('Error deleting mandi price:', error);
@@ -210,6 +234,7 @@ const MandiPrices = () => {
                 value={formData.price}
                 onChange={handleInputChange}
                 required
+                min="0"
                 placeholder="0.00"
                 className="agri-input"
               />
@@ -248,7 +273,7 @@ const MandiPrices = () => {
             <Button 
               type="button" 
               variant="outline" 
-              className="flex-1"
+              className="flex-1" 
               onClick={() => setIsModalOpen(false)}
             >
               Cancel

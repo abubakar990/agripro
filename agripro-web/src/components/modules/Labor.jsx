@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { IconPlus, IconUsers, IconCalendar, IconCheck, IconX, IconFileDownload, IconTrash, IconEdit } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
 import { supabase } from '../../lib/supabase';
@@ -7,7 +7,8 @@ import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 
 import { useWorkers, useAttendance, useFarms } from '../../hooks/queries';
-import { useFilteredData } from '../../hooks/useFilteredData';
+import { useFarmFilteredData } from '../../hooks/useFilteredData';
+import { useGlobalStore } from '../../store/globalStore';
 import { toast } from '../../utils/toast';
 import { confirmDialog } from '../../utils/confirmDialog';
 
@@ -15,12 +16,13 @@ const Labor = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
   const { data: farms = [] } = useFarms(currentOrgId);
   const farmIds = farms.map(f => f.id);
+  const farmFilter = useGlobalStore(state => state.farmFilter);
 
   const { data: rawWorkers = [], isLoading: loadingWorkers, refetch: refetchWorkers } = useWorkers(farmIds);
-  const workers = useFilteredData(rawWorkers);
+  // Your roster is point-in-time; attendance below is the period data.
+  const workers = useFarmFilteredData(rawWorkers);
 
   const { data: rawAttendance = [], isLoading: loadingAttendance, refetch: refetchAttendance } = useAttendance(farmIds);
-  const attendanceData = useFilteredData(rawAttendance);
 
   const isLoading = loadingWorkers || loadingAttendance;
 
@@ -30,7 +32,7 @@ const Labor = () => {
   const [isDeleting, setIsDeleting] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
-    farm_id: farms[0]?.id || '',
+    farm_id: (farmFilter && farmFilter !== 'all') ? farmFilter : (farms[0]?.id || ''),
     name: '',
     role: 'General Labor',
     daily_rate: '',
@@ -38,9 +40,22 @@ const Labor = () => {
     status: 'Active'
   });
 
+  useEffect(() => {
+    if (!formData.farm_id && farms.length > 0) {
+      const defaultFarm = (farmFilter && farmFilter !== 'all')
+        ? farmFilter
+        : farms[0].id;
+      setFormData(prev => ({ ...prev, farm_id: defaultFarm }));
+    }
+  }, [farms, farmFilter]);
+
   const handleToggleAttendance = async (workerId, status) => {
     try {
-      const worker = workers.find(w => w.id === workerId);
+      const worker = workers.find(w => w.id === workerId) || rawWorkers.find(w => w.id === workerId);
+      if (!worker) {
+        toast.error('Worker not found');
+        return;
+      }
       const { error } = await supabase
         .from('attendance')
         .upsert({
@@ -58,20 +73,24 @@ const Labor = () => {
     }
   };
 
+  // Attendance map is computed from the RAW (unfiltered) attendance so the
+  // global date filter cannot corrupt the selected-day view.
   const attendanceMap = useMemo(() => {
     const map = {};
-    attendanceData.filter(a => a.date === selectedDate).forEach(a => {
+    rawAttendance.filter(a => a.date === selectedDate).forEach(a => {
       map[a.worker_id] = a.present;
     });
     return map;
-  }, [attendanceData, selectedDate]);
+  }, [rawAttendance, selectedDate]);
 
   const stats = useMemo(() => {
     const activeCount = workers.filter(w => w.status === 'Active').length;
-    const presentCount = workers.filter(w => attendanceMap[w.id] === true).length;
+    const presentCount = workers.filter(w => w.status === 'Active' && attendanceMap[w.id] === true).length;
 
+    // Month wages are computed from the RAW attendance, decoupled from the
+    // global date range filter.
     const currentMonth = selectedDate.substring(0, 7);
-    const monthWages = attendanceData
+    const monthWages = rawAttendance
       .filter(a => a.date.startsWith(currentMonth) && a.present)
       .reduce((sum, a) => {
         const worker = workers.find(w => w.id === a.worker_id);
@@ -83,7 +102,7 @@ const Labor = () => {
       .reduce((sum, w) => sum + Number(w.daily_rate), 0);
 
     return { activeCount, presentCount, monthWages, dailyTotal };
-  }, [workers, attendanceMap, attendanceData, selectedDate]);
+  }, [workers, attendanceMap, rawAttendance, selectedDate]);
 
   const handleEdit = (worker) => {
     setEditingId(worker.id);
@@ -100,6 +119,26 @@ const Labor = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (farms.length === 0) {
+      toast.error('Please create a farm first before adding workers');
+      return;
+    }
+
+    const targetFarmId = formData.farm_id
+      ? parseInt(formData.farm_id)
+      : (farmFilter && farmFilter !== 'all' ? parseInt(farmFilter) : (farms.length > 0 ? farms[0].id : null));
+
+    if (!targetFarmId || isNaN(targetFarmId)) {
+      toast.error('Please select a valid farm');
+      return;
+    }
+
+    if (!formData.name || !formData.name.trim()) {
+      toast.error('Please enter the worker name');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -107,29 +146,39 @@ const Labor = () => {
         const { error } = await supabase
           .from('workers')
           .update({
-            ...formData,
-            farm_id: parseInt(formData.farm_id),
-            daily_rate: parseFloat(formData.daily_rate) || 0
+            farm_id: targetFarmId,
+            name: formData.name.trim(),
+            role: formData.role,
+            daily_rate: parseFloat(formData.daily_rate) || 0,
+            phone: formData.phone || '',
+            status: formData.status
           })
           .eq('id', editingId);
         if (error) throw error;
+        toast.success('Worker updated successfully');
       } else {
         const { error } = await supabase
           .from('workers')
           .insert([{
-            ...formData,
-            farm_id: parseInt(formData.farm_id),
+            farm_id: targetFarmId,
+            name: formData.name.trim(),
+            role: formData.role,
             daily_rate: parseFloat(formData.daily_rate) || 0,
+            phone: formData.phone || '',
             status: 'Active'
           }]);
         if (error) throw error;
+        toast.success('Worker added successfully');
       }
 
       await refetchWorkers();
       setIsModalOpen(false);
       setEditingId(null);
+      const defaultFarm = (farmFilter && farmFilter !== 'all')
+        ? farmFilter
+        : (farms.length > 0 ? farms[0].id : '');
       setFormData({
-        farm_id: farms[0]?.id || '',
+        farm_id: defaultFarm,
         name: '',
         role: 'General Labor',
         daily_rate: '',
@@ -146,8 +195,11 @@ const Labor = () => {
 
   const openAddModal = () => {
     setEditingId(null);
+    const defaultFarm = (farmFilter && farmFilter !== 'all')
+      ? farmFilter
+      : (farms.length > 0 ? farms[0].id : '');
     setFormData({
-      farm_id: farms[0]?.id || '',
+      farm_id: defaultFarm,
       name: '',
       role: 'General Labor',
       daily_rate: '',
@@ -164,6 +216,7 @@ const Labor = () => {
     try {
       const { error } = await supabase.from('workers').delete().eq('id', worker.id);
       if (error) throw error;
+      toast.success('Worker deleted successfully');
       await refetchWorkers();
     } catch (error) {
       console.error('Error deleting worker:', error.message);
@@ -328,10 +381,11 @@ const Labor = () => {
               <label className="agri-label">Select Farm</label>
               <select 
                 className="agri-input"
-                value={formData.farm_id}
+                value={formData.farm_id || (farms.length > 0 ? farms[0].id : '')}
                 onChange={e => setFormData({...formData, farm_id: e.target.value})}
                 required
               >
+                {farms.length === 0 && <option value="">No farms available</option>}
                 {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </div>
@@ -363,8 +417,9 @@ const Labor = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="agri-label">Daily Rate (PKR)</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
+                  min="0"
                   className="agri-input"
                   value={formData.daily_rate}
                   onChange={e => setFormData({...formData, daily_rate: e.target.value})}
@@ -410,7 +465,7 @@ const Labor = () => {
               type="submit" 
               variant="primary" 
               className="flex-1"
-              disabled={isSubmitting}
+              disabled={isSubmitting || farms.length === 0}
             >
               {isSubmitting ? 'Saving...' : 'Save Worker'}
             </Button>

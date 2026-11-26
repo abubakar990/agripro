@@ -1,10 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { IconPlus, IconMilk, IconStethoscope, IconGenderFemale, IconGenderMale, IconCalendar, IconCoins, IconTrash, IconEdit } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
 import { supabase } from '../../lib/supabase';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
+
+import { useLivestock, useAnimalHealth, useCategories, useFarms } from '../../hooks/queries';
+import { useFilteredData, useFarmFilteredData } from '../../hooks/useFilteredData';
+import { useGlobalStore } from '../../store/globalStore';
+import { toast } from '../../utils/toast';
+import { confirmDialog } from '../../utils/confirmDialog';
 
 const AnimalCard = ({ animal, farm, healthEvents = [], onRecordHealth, onEdit, refetch }) => {
   const [isDeleting, setIsDeleting] = useState(false);
@@ -20,6 +26,7 @@ const AnimalCard = ({ animal, farm, healthEvents = [], onRecordHealth, onEdit, r
         .eq('id', animal.id);
       
       if (error) throw error;
+      toast.success('Animal deleted successfully');
       await refetch();
     } catch (error) {
       console.error('Error deleting animal:', error.message);
@@ -135,18 +142,15 @@ const AnimalCard = ({ animal, farm, healthEvents = [], onRecordHealth, onEdit, r
   );
 };
 
-import { useLivestock, useAnimalHealth, useCategories, useFarms } from '../../hooks/queries';
-import { useFilteredData } from '../../hooks/useFilteredData';
-import { toast } from '../../utils/toast';
-import { confirmDialog } from '../../utils/confirmDialog';
-
 const Livestock = ({ user }) => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
   const { data: farms = [] } = useFarms(currentOrgId);
   const farmIds = farms.map(f => f.id);
+  const farmFilter = useGlobalStore(state => state.farmFilter);
 
   const { data: rawLivestock = [], isLoading: loadingLivestock, refetch: refetchLivestock } = useLivestock(farmIds);
-  const livestock = useFilteredData(rawLivestock);
+  // The herd you own is point-in-time; health events are period data.
+  const livestock = useFarmFilteredData(rawLivestock);
 
   const { data: rawHealth = [], isLoading: loadingHealth, refetch: refetchHealth } = useAnimalHealth(farmIds);
   const animalHealth = useFilteredData(rawHealth);
@@ -163,7 +167,7 @@ const Livestock = ({ user }) => {
   const [customCategory, setCustomCategory] = useState('');
 
   const [formData, setFormData] = useState({
-    farm_id: farms[0]?.id || '',
+    farm_id: (farmFilter && farmFilter !== 'all') ? farmFilter : (farms[0]?.id || ''),
     type: categories.length > 0 ? categories[0].name : 'ADD_NEW',
     tag: '',
     name: '',
@@ -174,6 +178,15 @@ const Livestock = ({ user }) => {
     milk_avg_litres: '0',
     status: 'Active'
   });
+
+  useEffect(() => {
+    if (!formData.farm_id && farms.length > 0) {
+      const defaultFarm = (farmFilter && farmFilter !== 'all')
+        ? farmFilter
+        : farms[0].id;
+      setFormData(prev => ({ ...prev, farm_id: defaultFarm }));
+    }
+  }, [farms, farmFilter]);
 
   const [healthData, setHealthData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -188,7 +201,9 @@ const Livestock = ({ user }) => {
     const totalAnimals = livestock.length;
     const totalValue = livestock.reduce((sum, a) => sum + Number(a.current_value || 0), 0);
     const milkingAnimals = livestock.filter(a => a.milk_avg_litres > 0).length;
-    const dailyMilk = livestock.reduce((sum, a) => sum + Number(a.milk_avg_litres || 0), 0);
+    const dailyMilk = livestock
+      .filter(a => a.status === 'Active')
+      .reduce((sum, a) => sum + Number(a.milk_avg_litres || 0), 0);
     
     return { totalAnimals, totalValue, milkingAnimals, dailyMilk };
   }, [livestock]);
@@ -221,29 +236,57 @@ const Livestock = ({ user }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitting(true);
 
+    if (farms.length === 0) {
+      toast.error('Please create a farm first before adding livestock');
+      return;
+    }
+
+    const targetFarmId = formData.farm_id
+      ? parseInt(formData.farm_id)
+      : (farmFilter && farmFilter !== 'all' ? parseInt(farmFilter) : (farms.length > 0 ? farms[0].id : null));
+
+    if (!targetFarmId || isNaN(targetFarmId)) {
+      toast.error('Please select a valid farm');
+      return;
+    }
+
+    if (!formData.tag || !formData.tag.trim()) {
+      toast.error('Please enter a Tag ID');
+      return;
+    }
+
+    setIsSubmitting(true);
     let finalType = formData.type;
 
     try {
       if (formData.type === 'ADD_NEW') {
+        if (!customCategory.trim()) {
+          toast.error('Please enter a new type name');
+          setIsSubmitting(false);
+          return;
+        }
         const { error: catError } = await supabase
           .from('categories')
-          .insert([{ 
-            name: customCategory, 
+          .insert([{
+            name: customCategory.trim(),
             module: 'livestock',
-            user_id: user?.id 
+            user_id: user?.id,
+            org_id: currentOrgId
           }]);
         
         if (catError && catError.code !== '23505') throw catError;
-        finalType = customCategory;
+        finalType = customCategory.trim();
       }
 
       const submissionData = {
         ...formData,
-        dob: formData.dob || null,
+        tag: formData.tag.trim(),
+        name: formData.name ? formData.name.trim() : '',
+        dob: formData.dob ? formData.dob : null,
         type: finalType,
-        farm_id: parseInt(formData.farm_id),
+        farm_id: targetFarmId,
+        user_id: user?.id,
         purchase_price: parseFloat(formData.purchase_price) || 0,
         current_value: parseFloat(formData.current_value) || 0,
         milk_avg_litres: parseFloat(formData.milk_avg_litres) || 0
@@ -255,19 +298,24 @@ const Livestock = ({ user }) => {
           .update(submissionData)
           .eq('id', editingId);
         if (error) throw error;
+        toast.success('Animal updated successfully');
       } else {
         const { error } = await supabase
           .from('livestock')
           .insert([submissionData]);
         if (error) throw error;
+        toast.success('Animal added successfully');
       }
       
       await refetchLivestock();
       setIsModalOpen(false);
       setEditingId(null);
       setCustomCategory('');
+      const defaultFarm = (farmFilter && farmFilter !== 'all')
+        ? farmFilter
+        : (farms.length > 0 ? farms[0].id : '');
       setFormData({
-        farm_id: farms[0]?.id || '',
+        farm_id: defaultFarm,
         type: categories.length > 0 ? categories[0].name : 'ADD_NEW',
         tag: '',
         name: '',
@@ -289,8 +337,11 @@ const Livestock = ({ user }) => {
   const openAddModal = () => {
     setEditingId(null);
     setCustomCategory('');
+    const defaultFarm = (farmFilter && farmFilter !== 'all')
+      ? farmFilter
+      : (farms.length > 0 ? farms[0].id : '');
     setFormData({
-      farm_id: farms[0]?.id || '',
+      farm_id: defaultFarm,
       type: categories.length > 0 ? categories[0].name : 'ADD_NEW',
       tag: '',
       name: '',
@@ -319,23 +370,31 @@ const Livestock = ({ user }) => {
 
   const handleHealthSubmit = async (e) => {
     e.preventDefault();
+
+    if (!selectedAnimal?.id) {
+      toast.error('No animal selected');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
+      const healthDate = healthData.date ? healthData.date : new Date().toISOString().split('T')[0];
       const { error } = await supabase
         .from('animal_health')
         .insert([{
           livestock_id: selectedAnimal.id,
-          date: healthData.date,
+          user_id: user?.id,
+          date: healthDate,
           event: healthData.event,
-          treatment: healthData.treatment,
-          vet: healthData.vet,
+          treatment: healthData.treatment ? healthData.treatment.trim() : '',
+          vet: healthData.vet ? healthData.vet.trim() : '',
           cost: parseFloat(healthData.cost) || 0,
-          note: healthData.note
+          note: healthData.note ? healthData.note.trim() : ''
         }]);
 
       if (error) throw error;
-      
+      toast.success('Health event recorded successfully');
       await refetchHealth();
       setIsHealthModalOpen(false);
       setSelectedAnimal(null);
@@ -430,10 +489,11 @@ const Livestock = ({ user }) => {
               <label className="agri-label">Select Farm</label>
               <select 
                 className="agri-input"
-                value={formData.farm_id}
+                value={formData.farm_id || (farms.length > 0 ? farms[0].id : '')}
                 onChange={e => setFormData({...formData, farm_id: e.target.value})}
                 required
               >
+                {farms.length === 0 && <option value="">No farms available</option>}
                 {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </div>
@@ -506,9 +566,10 @@ const Livestock = ({ user }) => {
             </div>
             <div>
               <label className="agri-label">Avg Daily Milk (L)</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
                 step="0.1"
+                min="0"
                 className="agri-input"
                 value={formData.milk_avg_litres}
                 onChange={e => setFormData({...formData, milk_avg_litres: e.target.value})}
@@ -516,8 +577,9 @@ const Livestock = ({ user }) => {
             </div>
             <div>
               <label className="agri-label">Purchase Price</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
+                min="0"
                 className="agri-input"
                 value={formData.purchase_price}
                 onChange={e => setFormData({...formData, purchase_price: e.target.value})}
@@ -525,8 +587,9 @@ const Livestock = ({ user }) => {
             </div>
             <div>
               <label className="agri-label">Current Value</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
+                min="0"
                 className="agri-input"
                 value={formData.current_value}
                 onChange={e => setFormData({...formData, current_value: e.target.value})}
@@ -560,7 +623,7 @@ const Livestock = ({ user }) => {
               type="submit" 
               variant="primary" 
               className="flex-1"
-              disabled={isSubmitting}
+              disabled={isSubmitting || farms.length === 0}
             >
               {isSubmitting ? 'Saving...' : 'Save Animal'}
             </Button>
@@ -624,9 +687,10 @@ const Livestock = ({ user }) => {
             </div>
             <div>
               <label className="agri-label">Cost (PKR)</label>
-              <input 
-                type="number" 
-                className="agri-input" 
+              <input
+                type="number"
+                min="0"
+                className="agri-input"
                 placeholder="0.00"
                 value={healthData.cost}
                 onChange={e => setHealthData({...healthData, cost: e.target.value})}

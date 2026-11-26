@@ -1,8 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { IconPlus, IconUser, IconPhone, IconMapPin, IconReceipt2, IconTrash } from '@tabler/icons-react';
 import { formatPKR } from '../../utils/format';
 import Button from '../shared/Button';
-import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import { supabase } from '../../lib/supabase';
 
@@ -34,16 +33,36 @@ const VendorsBuyers = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!currentOrgId) {
+      toast.error('Organization ID not found. Please re-select your organization.');
+      return;
+    }
+
+    if (!formData.name || !formData.name.trim()) {
+      toast.error('Please enter a name');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+
       const { error } = await supabase.from('vendors_buyers').insert([{
-        ...formData,
+        type: formData.type,
+        name: formData.name.trim(),
+        contact: formData.contact ? formData.contact.trim() : '',
+        address: formData.address ? formData.address.trim() : '',
+        note: formData.note ? formData.note.trim() : '',
+        org_id: currentOrgId,
+        user_id: user?.id || null,
         total_business: parseFloat(formData.total_business) || 0,
         total_settled: parseFloat(formData.total_settled) || 0
       }]);
       
       if (error) throw error;
       
+      toast.success(`${formData.type} added successfully`);
       await refetch();
       setIsModalOpen(false);
       setFormData({
@@ -68,6 +87,7 @@ const VendorsBuyers = () => {
     try {
       const { error } = await supabase.from('vendors_buyers').delete().eq('id', id);
       if (error) throw error;
+      toast.success('Contact deleted successfully');
       await refetch();
     } catch (error) {
       console.error('Error deleting contact:', error);
@@ -270,6 +290,7 @@ const VendorsBuyers = () => {
                 name="total_business"
                 value={formData.total_business}
                 onChange={handleInputChange}
+                min="0"
                 placeholder="0.00"
                 className="agri-input"
               />
@@ -281,6 +302,7 @@ const VendorsBuyers = () => {
                 name="total_settled"
                 value={formData.total_settled}
                 onChange={handleInputChange}
+                min="0"
                 placeholder="0.00"
                 className="agri-input"
               />
@@ -302,7 +324,7 @@ const VendorsBuyers = () => {
             <Button 
               type="button" 
               variant="outline" 
-              className="flex-1"
+              className="flex-1" 
               onClick={() => setIsModalOpen(false)}
             >
               Cancel
