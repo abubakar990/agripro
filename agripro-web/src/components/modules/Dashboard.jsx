@@ -7,13 +7,15 @@ import {
   IconBuildingBank, 
   IconEngine, 
   IconUsers, 
-  IconMilk 
+  IconMilk,
+  IconWallet,
+  IconCoins
 } from '@tabler/icons-react';
 import { formatPKR } from '../../utils/format';
-import { creditOutstanding, loanOutstanding } from '../../utils/finance';
+import { creditOutstanding, loanOutstanding, cashBalance, loansReceivable } from '../../utils/finance';
 import Badge from '../shared/Badge';
 
-const KpiCard = ({ title, value, icon: Icon, colorClass, trend }) => (
+const KpiCard = ({ title, value, icon: Icon, colorClass, trend, hint }) => (
   <div className={`agri-card p-5 border-l-4 ${colorClass}`}>
     <div className="flex justify-between items-start mb-2">
       <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">{title}</span>
@@ -21,6 +23,7 @@ const KpiCard = ({ title, value, icon: Icon, colorClass, trend }) => (
     </div>
     <div className="flex flex-col">
       <span className="text-lg font-bold text-text-primary">{value}</span>
+      {hint && <span className="text-[10px] text-text-muted mt-1">{hint}</span>}
       {trend && (
         <div className="flex items-center gap-1 mt-1">
           <IconTrendingUp size={14} className="text-revenue" />
@@ -35,12 +38,12 @@ import { useFilteredDashboardData } from '../../hooks/useFilteredDashboardData';
 
 const Dashboard = () => {
   const { 
-    revenue, expenses, workers, machinery,
+    revenue, expenses, allRevenue, allExpenses, workers, machinery,
     livestock, creditEntries, loans, inventory, attendance, isLoading 
   } = useFilteredDashboardData();
 
   const stats = useMemo(() => {
-    if (isLoading) return { totalRev: 0, totalExp: 0, netProfit: 0, creditReceivable: 0, outstandingLoans: 0, assetValue: 0, attendance: '0 / 0', livestockCount: 0 };
+    if (isLoading) return { totalRev: 0, totalExp: 0, netProfit: 0, creditReceivable: 0, outstandingLoans: 0, cash: 0, lentReceivable: 0, assetValue: 0, attendance: '0 / 0', livestockCount: 0 };
     const totalRev = revenue.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
     const totalExp = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
     const netProfit = totalRev - totalExp;
@@ -67,11 +70,13 @@ const Dashboard = () => {
       netProfit,
       creditReceivable,
       outstandingLoans,
+      cash: cashBalance({ revenue: allRevenue, expenses: allExpenses, loans }),
+      lentReceivable: loansReceivable(loans),
       assetValue,
       attendance: `${todayAttendance} / ${workers.length}`,
       livestockCount: livestock.length
     };
-  }, [revenue, expenses, workers, machinery, livestock, creditEntries, loans, attendance, isLoading]);
+  }, [revenue, expenses, allRevenue, allExpenses, workers, machinery, livestock, creditEntries, loans, attendance, isLoading]);
 
   const recentTransactions = useMemo(() => {
     const all = [
@@ -160,12 +165,14 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard title="Total Revenue" value={formatPKR(stats.totalRev)} icon={IconTrendingUp} colorClass="border-revenue" />
         <KpiCard title="Total Expenses" value={formatPKR(stats.totalExp)} icon={IconTrendingDown} colorClass="border-expense" />
         <KpiCard title="Net Profit / Loss" value={formatPKR(stats.netProfit)} icon={IconScale} colorClass={stats.netProfit >= 0 ? "border-accent-blue" : "border-expense"} />
         <KpiCard title="Credit Receivable" value={formatPKR(stats.creditReceivable)} icon={IconCreditCard} colorClass="border-accent-amber" />
+        <KpiCard title="Cash Balance" value={formatPKR(stats.cash)} icon={IconWallet} colorClass={stats.cash >= 0 ? "border-revenue" : "border-expense"} hint="All dates: revenue + loans taken − expenses − loans given" />
         <KpiCard title="Outstanding Loans" value={formatPKR(stats.outstandingLoans)} icon={IconBuildingBank} colorClass="border-expense" />
+        <KpiCard title="Money Lent" value={formatPKR(stats.lentReceivable)} icon={IconCoins} colorClass="border-accent-blue" hint="Still to recover from loans you gave" />
         <KpiCard title="Total Asset Value" value={formatPKR(stats.assetValue)} icon={IconEngine} colorClass="border-revenue" />
         <KpiCard title="Today's Attendance" value={stats.attendance} icon={IconUsers} colorClass="border-revenue" />
         <KpiCard title="Livestock Count" value={stats.livestockCount} icon={IconMilk} colorClass="border-accent-amber" />

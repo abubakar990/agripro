@@ -56,6 +56,9 @@ export const useFilteredDashboardData = () => {
       // The farms table keys on `id`, not `farm_id`.
       farms: filterByFarm(farms, farmFilter, 'id'),
       revenue: period(revenue),
+      // Cash in hand is a running balance, so it needs every date, not just the selected period.
+      allRevenue: pointInTime(revenue),
+      allExpenses: pointInTime(expenses),
       expenses: period(expenses),
       attendance: period(attendance),
       machinery: pointInTime(machinery),

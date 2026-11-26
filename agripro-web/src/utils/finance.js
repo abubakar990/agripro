@@ -49,3 +49,27 @@ export function loanOutstanding(loan) {
 }
 
 export { num as toNumber, round2 };
+
+/**
+ * Estimated cash in hand across all dates:
+ *   revenue − expenses
+ *   + loans taken (Borrowed principal) − repayments made on them
+ *   − loans given (Lent principal)    + recoveries received on them
+ * Credit Ledger entries are not included: they track receivables/payables, and
+ * whether their cash is also entered as revenue/expense varies by user.
+ */
+export function cashBalance({ revenue = [], expenses = [], loans = [] } = {}) {
+  let cash = 0;
+  for (const r of revenue) cash += num(r.amount);
+  for (const e of expenses) cash -= num(e.amount);
+  for (const l of loans) {
+    if (l.type === 'Borrowed') cash += num(l.principal) - paidAmount(l);
+    else if (l.type === 'Lent') cash -= num(l.principal) - paidAmount(l);
+  }
+  return round2(cash);
+}
+
+/** Money others still owe us on loans we gave (Lent). */
+export function loansReceivable(loans = []) {
+  return round2(loans.filter(l => l.type === 'Lent').reduce((s, l) => s + loanOutstanding(l), 0));
+}

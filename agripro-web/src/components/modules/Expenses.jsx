@@ -24,7 +24,13 @@ const Expenses = ({ user }) => {
   const expenses = useFilteredData(rawExpenses);
   
   const { data: allCategories = [] } = useCategories(currentOrgId);
-  const categories = allCategories.filter(c => c.module === 'expense');
+  const expenseCategories = allCategories.filter(c => c.module === 'expense');
+  // Top-level khatas only; sub-khatas (parent_id set) are picked in a second dropdown.
+  const categories = expenseCategories.filter(c => !c.parent_id);
+  const subCategoriesOf = (categoryName) => {
+    const parent = categories.find(c => c.name === categoryName);
+    return parent ? expenseCategories.filter(c => c.parent_id === parent.id) : [];
+  };
   
   const { data: farmPlots = [] } = useFarmPlots(farmIds);
   const { data: cropCycles = [] } = useCropCycles(farmIds);
@@ -33,6 +39,7 @@ const Expenses = ({ user }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [customCategory, setCustomCategory] = useState('');
+  const [customSubCategory, setCustomSubCategory] = useState('');
 
   const getInitialFarmId = () => {
     if (farmFilter !== 'all' && farms.some(f => String(f.id) === String(farmFilter))) {
@@ -55,7 +62,8 @@ const Expenses = ({ user }) => {
     quantity: '',
     unit: '',
     unit_price: '',
-    note: ''
+    note: '',
+    sub_category: ''
   });
 
   // Sync default farm_id when farms finish loading
@@ -90,11 +98,16 @@ const Expenses = ({ user }) => {
   }, [expenses, farmPlots, cropCycles, farms]);
 
   const categoryTotals = useMemo(() => {
-    const totals = expenses.reduce((acc, e) => {
-      acc[e.category] = (acc[e.category] || 0) + e.amount;
-      return acc;
-    }, {});
-    return Object.entries(totals).sort((a, b) => b[1] - a[1]);
+    const totals = {};
+    for (const e of expenses) {
+      const amt = parseFloat(e.amount) || 0;
+      const t = (totals[e.category] ||= { amount: 0, subs: {} });
+      t.amount += amt;
+      if (e.sub_category) t.subs[e.sub_category] = (t.subs[e.sub_category] || 0) + amt;
+    }
+    return Object.entries(totals)
+      .map(([cat, t]) => [cat, t.amount, Object.entries(t.subs).sort((a, b) => b[1] - a[1])])
+      .sort((a, b) => b[1] - a[1]);
   }, [expenses]);
 
   // Quantity totals per item + unit, e.g. "Urea: 25 bag" for the current filters.
@@ -103,7 +116,13 @@ const Expenses = ({ user }) => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+      // A sub-khata belongs to one khata, so changing the khata clears it.
+      ...(name === 'category' ? { sub_category: '' } : {})
+    }));
+    if (name === 'category') setCustomSubCategory('');
   };
 
   const handlePlotChange = (e) => {
@@ -140,8 +159,13 @@ const Expenses = ({ user }) => {
       quantity: e.quantity != null ? String(Number(e.quantity)) : '',
       unit: e.unit || '',
       unit_price: e.unit_price != null ? String(Number(e.unit_price)) : '',
-      note: e.note || ''
+      note: e.note || '',
+      sub_category: !e.sub_category ? ''
+        : subCategoriesOf(e.category).some(c => c.name === e.sub_category) ? e.sub_category : 'ADD_NEW_SUB'
     });
+    setCustomSubCategory(
+      e.sub_category && !subCategoriesOf(e.category).some(c => c.name === e.sub_category) ? e.sub_category : ''
+    );
     
     if (!isKnownCategory) {
       setCustomCategory(e.category);
@@ -190,9 +214,31 @@ const Expenses = ({ user }) => {
         finalCategory = customCategory;
       }
 
+      let finalSubCategory = formData.sub_category || null;
+      if (formData.sub_category === 'ADD_NEW_SUB') {
+        const parent = categories.find(c => c.name === finalCategory);
+        finalSubCategory = customSubCategory.trim();
+        if (!parent || !finalSubCategory) {
+          toast.error('Please enter a sub-khata name.');
+          setIsSubmitting(false);
+          return;
+        }
+        const { error: subError } = await supabase
+          .from('categories')
+          .insert([{
+            name: finalSubCategory,
+            module: 'expense',
+            parent_id: parent.id,
+            user_id: user?.id,
+            org_id: currentOrgId
+          }]);
+        if (subError && subError.code !== '23505') throw subError; // already exists: just use it
+      }
+
       const payload = {
         ...formData,
         category: finalCategory,
+        sub_category: formData.category === 'ADD_NEW' ? null : finalSubCategory,
         amount: amount,
         farm_id: targetFarmId,
         plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
@@ -266,7 +312,8 @@ const Expenses = ({ user }) => {
       quantity: '',
       unit: '',
       unit_price: '',
-      note: ''
+      note: '',
+      sub_category: ''
     });
     setIsModalOpen(true);
   };
@@ -331,10 +378,20 @@ const Expenses = ({ user }) => {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {categoryTotals.map(([cat, amount], idx) => (
-          <div key={idx} className="agri-card p-3 flex flex-col items-center text-center">
+        {categoryTotals.map(([cat, amount, subs]) => (
+          <div key={cat} className="agri-card p-3 flex flex-col items-center text-center">
             <span className="text-[10px] font-bold text-text-muted uppercase mb-1">{cat}</span>
             <span className="text-[13px] font-bold text-expense">{formatPKR(amount)}</span>
+            {subs.length > 0 && (
+              <div className="mt-2 w-full space-y-0.5 border-t border-border pt-2">
+                {subs.map(([sub, subAmount]) => (
+                  <div key={sub} className="flex justify-between gap-2 text-[10px]">
+                    <span className="text-text-muted truncate">{sub}</span>
+                    <span className="font-bold text-text-secondary whitespace-nowrap">{formatPKR(subAmount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -398,7 +455,10 @@ const Expenses = ({ user }) => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Badge variant="primary">{farm ? farm.name : 'Unknown'}</Badge>
                       </td>
-                      <td className="px-6 py-4 font-bold text-text-primary">{e.category}</td>
+                      <td className="px-6 py-4 font-bold text-text-primary">
+                        {e.category}
+                        {e.sub_category && <div className="text-[11px] font-medium text-text-muted">› {e.sub_category}</div>}
+                      </td>
                       <td className="px-6 py-4 text-text-secondary text-[13px]">{e.description}</td>
                       <td className="px-6 py-4 text-[13px] whitespace-nowrap">
                         {e.item_name && <div className="font-bold text-text-primary">{e.item_name}</div>}
@@ -554,6 +614,36 @@ const Expenses = ({ user }) => {
                   value={customCategory}
                   onChange={(e) => setCustomCategory(e.target.value)}
                   placeholder="e.g. Bio-fertilizer"
+                  required
+                  className="agri-input"
+                />
+              </div>
+            )}
+            {formData.category !== 'ADD_NEW' && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-muted uppercase">Sub-Khata</label>
+                <select
+                  name="sub_category"
+                  value={formData.sub_category}
+                  onChange={handleInputChange}
+                  className="agri-input"
+                >
+                  <option value="">— None —</option>
+                  {subCategoriesOf(formData.category).map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                  <option value="ADD_NEW_SUB">+ Add New Sub-Khata</option>
+                </select>
+              </div>
+            )}
+            {formData.sub_category === 'ADD_NEW_SUB' && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-text-muted uppercase">New Sub-Khata Name</label>
+                <input
+                  type="text"
+                  value={customSubCategory}
+                  onChange={(e) => setCustomSubCategory(e.target.value)}
+                  placeholder="e.g. Bijli, Gas"
                   required
                   className="agri-input"
                 />
