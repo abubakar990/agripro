@@ -3,6 +3,7 @@ import { IconPlus, IconUser, IconPhone, IconMapPin, IconReceipt2, IconTrash } fr
 import { formatPKR } from '../../utils/format';
 import Button from '../shared/Button';
 import Modal from '../shared/Modal';
+import PartyLedgerModal from '../shared/PartyLedgerModal';
 import { supabase } from '../../lib/supabase';
 
 import { useVendorsBuyers } from '../../hooks/queries';
@@ -16,6 +17,7 @@ const VendorsBuyers = () => {
   const [activeTab, setActiveTab] = useState('Vendor');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedLedgerParty, setSelectedLedgerParty] = useState(null);
   const [formData, setFormData] = useState({
     type: 'Vendor',
     name: '',
@@ -175,7 +177,15 @@ const VendorsBuyers = () => {
                         {person.name.charAt(0)}
                       </div>
                       <div>
-                        <h3 className="font-bold text-text-primary leading-tight">{person.name}</h3>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedLedgerParty(person.name)}
+                          className="font-bold text-text-primary hover:text-primary transition-colors text-left leading-tight hover:underline flex items-center gap-1 group"
+                          title="Click to view full financial ledger"
+                        >
+                          {person.name}
+                          <IconReceipt2 size={13} className="opacity-0 group-hover:opacity-100 text-primary transition-opacity" />
+                        </button>
                         <p className="text-[10px] font-bold text-text-muted uppercase tracking-tighter">ID: #{person.id}</p>
                       </div>
                     </div>
@@ -212,6 +222,17 @@ const VendorsBuyers = () => {
                       </span>
                     </div>
                   </div>
+                </div>
+
+                <div className="px-5 py-3 bg-bg border-t border-border flex justify-between items-center">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLedgerParty(person.name)}
+                    className="text-xs font-bold text-primary hover:text-primary-dark hover:underline flex items-center gap-1.5"
+                  >
+                    <IconReceipt2 size={15} />
+                    View Statement & Khata
+                  </button>
                 </div>
               </div>
             );
@@ -340,6 +361,12 @@ const VendorsBuyers = () => {
           </div>
         </form>
       </Modal>
+
+      <PartyLedgerModal
+        isOpen={!!selectedLedgerParty}
+        onClose={() => setSelectedLedgerParty(null)}
+        partyName={selectedLedgerParty || ''}
+      />
     </div>
   );
 };

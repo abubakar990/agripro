@@ -1,18 +1,20 @@
 import { useMemo, useState, useEffect } from 'react';
-import { IconPlus, IconBuildingBank, IconTrendingUp, IconTrendingDown, IconTrash } from '@tabler/icons-react';
+import { IconPlus, IconBuildingBank, IconTrendingUp, IconTrendingDown, IconTrash, IconReceipt2 } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
 import { paidAmount, loanOutstanding, toNumber as num } from '../../utils/finance';
 import { supabase } from '../../lib/supabase';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
+import PartySelect from '../shared/PartySelect';
+import PartyLedgerModal from '../shared/PartyLedgerModal';
 import { useLoans, useFarms } from '../../hooks/queries';
 import { useFarmFilteredData } from '../../hooks/useFilteredData';
 import { useGlobalStore } from '../../store/globalStore';
 import { toast } from '../../utils/toast';
 import { confirmDialog } from '../../utils/confirmDialog';
 
-const LoanCard = ({ loan, farm, onRecordRepayment, refetch }) => {
+const LoanCard = ({ loan, farm, onRecordRepayment, onOpenLedger, refetch }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const paid = paidAmount(loan);
   const remaining = loanOutstanding(loan);
@@ -45,7 +47,15 @@ const LoanCard = ({ loan, farm, onRecordRepayment, refetch }) => {
     <div className="agri-card overflow-hidden flex flex-col">
       <div className="p-4 border-b border-border flex justify-between items-start">
         <div>
-          <h4 className="font-bold text-text-primary">{loan.party}</h4>
+          <button
+            type="button"
+            onClick={() => onOpenLedger?.(loan.party)}
+            className="text-left font-bold text-text-primary hover:text-primary transition-colors flex items-center gap-1 group"
+            title="Click to view full financial ledger"
+          >
+            <span className="group-hover:underline">{loan.party}</span>
+            <IconReceipt2 size={13} className="opacity-0 group-hover:opacity-100 transition-opacity text-primary" />
+          </button>
           <p className="text-[11px] text-text-muted uppercase font-bold">{farm?.name || 'Unknown Farm'}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -144,6 +154,7 @@ const Loans = () => {
   const [isRepaymentModalOpen, setIsRepaymentModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState(null);
+  const [selectedLedgerParty, setSelectedLedgerParty] = useState(null);
 
   const getInitialFarmId = () => {
     if (farmFilter !== 'all' && farms.some(f => String(f.id) === String(farmFilter))) {
@@ -388,6 +399,7 @@ const Loans = () => {
               loan={loan} 
               farm={farms.find(f => f.id === loan.farm_id)} 
               onRecordRepayment={handleRecordRepayment}
+              onOpenLedger={(partyName) => setSelectedLedgerParty(partyName)}
               refetch={refetch}
             />
           ))
@@ -442,13 +454,10 @@ const Loans = () => {
               />
             </div>
             <div className="col-span-2">
-              <label className="agri-label">Party Name</label>
-              <input 
-                type="text" 
-                className="agri-input" 
-                placeholder="e.g. Bank, Person Name"
+              <PartySelect
                 value={formData.party}
-                onChange={e => setFormData({...formData, party: e.target.value})}
+                onChange={(partyName) => setFormData(prev => ({ ...prev, party: partyName }))}
+                onViewLedger={(partyObj) => setSelectedLedgerParty(partyObj.name)}
                 required
               />
             </div>
@@ -604,6 +613,12 @@ const Loans = () => {
           </div>
         </form>
       </Modal>
+
+      <PartyLedgerModal
+        isOpen={!!selectedLedgerParty}
+        onClose={() => setSelectedLedgerParty(null)}
+        partyName={selectedLedgerParty || ''}
+      />
     </div>
   );
 };
