@@ -11,7 +11,7 @@ const sizeClasses = {
   '4xl': 'max-w-4xl',
 };
 
-const Modal = ({ isOpen, onClose, title, size = 'md', children }) => {
+const Modal = ({ isOpen, onClose, title, size = 'md', zIndex = 'z-[1000]', children }) => {
   const dialogRef = useRef(null);
   const onCloseRef = useRef(onClose);
 
@@ -47,7 +47,7 @@ const Modal = ({ isOpen, onClose, title, size = 'md', children }) => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4"
+      className={`fixed inset-0 ${zIndex} flex items-center justify-center bg-black/55 backdrop-blur-sm p-4`}
       onClick={handleBackdropClick}
     >
       <div

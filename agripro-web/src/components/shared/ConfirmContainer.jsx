@@ -29,7 +29,7 @@ export default function ConfirmContainer() {
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleNo} title="Confirm Action">
+    <Modal isOpen={isOpen} onClose={handleNo} title="Confirm Action" zIndex="z-[1100]">
       <div className="flex flex-col items-center text-center py-4">
         <IconAlertTriangle size={48} className="text-amber-500 mb-4" />
         <p className="text-lg font-medium text-text-primary mb-6">{message}</p>
