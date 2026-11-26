@@ -19,7 +19,9 @@ const Reports = () => {
 
   // Revenue & expenses drive the P&L, which is period-based -> apply the global date filter.
   const revenue = useFilteredData(useRevenue(farmIds).data || []);
-  const expenses = useFilteredData(useExpenses(farmIds).data || []);
+  const periodExpenses = useFilteredData(useExpenses(farmIds).data || []);
+  // P&L uses operating expenses only; capital purchases are assets (see Machinery / Balance Sheet).
+  const expenses = useMemo(() => periodExpenses.filter(e => !e.is_capital), [periodExpenses]);
   // Assets and outstanding balances are point-in-time: NEVER filter by date, otherwise
   // undated assets and older receivables/payables/loans vanish whenever a range is active.
   // They must still honour the farm filter though, or the balance sheet reports every farm

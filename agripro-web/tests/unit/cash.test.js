@@ -51,4 +51,16 @@ export default function run(t) {
     201353,
     'Sardargarh cash in hand after 13 May = 201,353'
   );
+
+  // Capital purchase on credit (solar 2,144,900; 200,000 paid by cheque from money held by Ahmad Abbas):
+  // the asset purchase lowers cash only by what was paid, and that payment came out of the held balance.
+  t.equal(
+    cashBalance({
+      expenses: [{ amount: 2144900, is_capital: true }],
+      creditEntries: [{ type: 'Credit Purchase', total_amount: 2144900, payments: [{ amount: 200000 }] }],
+      loans: [{ type: 'Lent', principal: 370000, payments: [{ amount: 200000 }] }],
+    }),
+    -370000 + 200000 - 200000 + 0,
+    'solar on credit: cash in hand unchanged except the original money handed to Ahmad Abbas'
+  );
 }

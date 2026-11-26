@@ -63,7 +63,8 @@ const Expenses = ({ user }) => {
     unit: '',
     unit_price: '',
     note: '',
-    sub_category: ''
+    sub_category: '',
+    is_capital: false
   });
 
   // Sync default farm_id when farms finish loading
@@ -76,14 +77,21 @@ const Expenses = ({ user }) => {
     }
   }, [farms, farmFilter]);
 
+  // Capital purchases (fixed assets) are listed but kept out of expense totals, per accrual accounting.
+  const operatingExpenses = useMemo(() => expenses.filter(e => !e.is_capital), [expenses]);
+  const capitalTotal = useMemo(
+    () => expenses.filter(e => e.is_capital).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0),
+    [expenses]
+  );
+
   const stats = useMemo(() => {
     const context = { farmPlots, cropCycles, farms };
-    const total = expenses.reduce((sum, e) => sum + e.amount, 0);
-    const count = expenses.length;
-    const totalArea = calcTotalArea(expenses, context) || 0;
+    const total = operatingExpenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+    const count = operatingExpenses.length;
+    const totalArea = calcTotalArea(operatingExpenses, context) || 0;
     const costPerAcre = totalArea > 0 ? total / totalArea : null;
-    const catSum = expenses.reduce((acc, e) => {
-      acc[e.category] = (acc[e.category] || 0) + e.amount;
+    const catSum = operatingExpenses.reduce((acc, e) => {
+      acc[e.category] = (acc[e.category] || 0) + (parseFloat(e.amount) || 0);
       return acc;
     }, {});
     const topCategory = Object.entries(catSum).sort((a, b) => b[1] - a[1])[0];
@@ -95,11 +103,11 @@ const Expenses = ({ user }) => {
       topCategory: topCategory ? topCategory[0] : '—',
       topCategoryAmount: topCategory ? topCategory[1] : 0
     };
-  }, [expenses, farmPlots, cropCycles, farms]);
+  }, [operatingExpenses, farmPlots, cropCycles, farms]);
 
   const categoryTotals = useMemo(() => {
     const totals = {};
-    for (const e of expenses) {
+    for (const e of operatingExpenses) {
       const amt = parseFloat(e.amount) || 0;
       const t = (totals[e.category] ||= { amount: 0, subs: {} });
       t.amount += amt;
@@ -108,7 +116,7 @@ const Expenses = ({ user }) => {
     return Object.entries(totals)
       .map(([cat, t]) => [cat, t.amount, Object.entries(t.subs).sort((a, b) => b[1] - a[1])])
       .sort((a, b) => b[1] - a[1]);
-  }, [expenses]);
+  }, [operatingExpenses]);
 
   // Quantity totals per item + unit, e.g. "Urea: 25 bag" for the current filters.
   const itemSummary = useMemo(() => summarizeByItem(expenses), [expenses]);
@@ -161,7 +169,8 @@ const Expenses = ({ user }) => {
       unit_price: e.unit_price != null ? String(Number(e.unit_price)) : '',
       note: e.note || '',
       sub_category: !e.sub_category ? ''
-        : subCategoriesOf(e.category).some(c => c.name === e.sub_category) ? e.sub_category : 'ADD_NEW_SUB'
+        : subCategoriesOf(e.category).some(c => c.name === e.sub_category) ? e.sub_category : 'ADD_NEW_SUB',
+      is_capital: !!e.is_capital
     });
     setCustomSubCategory(
       e.sub_category && !subCategoriesOf(e.category).some(c => c.name === e.sub_category) ? e.sub_category : ''
@@ -239,6 +248,7 @@ const Expenses = ({ user }) => {
         ...formData,
         category: finalCategory,
         sub_category: formData.category === 'ADD_NEW' ? null : finalSubCategory,
+        is_capital: !!formData.is_capital,
         amount: amount,
         farm_id: targetFarmId,
         plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
@@ -313,7 +323,8 @@ const Expenses = ({ user }) => {
       unit: '',
       unit_price: '',
       note: '',
-      sub_category: ''
+      sub_category: '',
+      is_capital: false
     });
     setIsModalOpen(true);
   };
@@ -346,6 +357,9 @@ const Expenses = ({ user }) => {
             <IconReceipt2 size={20} className="text-expense" />
           </div>
           <span className="text-lg font-bold text-text-primary">{formatPKR(stats.total)}</span>
+          {capitalTotal > 0 && (
+            <span className="block text-[10px] text-text-muted mt-1">+ {formatPKR(capitalTotal)} capital purchases (assets, not in total)</span>
+          )}
         </div>
         <div className="agri-card p-5 border-l-4 border-accent-blue">
           <div className="flex justify-between items-start mb-2">
@@ -458,6 +472,7 @@ const Expenses = ({ user }) => {
                       <td className="px-6 py-4 font-bold text-text-primary">
                         {e.category}
                         {e.sub_category && <div className="text-[11px] font-medium text-text-muted">› {e.sub_category}</div>}
+                        {e.is_capital && <div className="mt-1"><Badge variant="primary">CAPITAL / ASSET</Badge></div>}
                       </td>
                       <td className="px-6 py-4 text-text-secondary text-[13px]">{e.description}</td>
                       <td className="px-6 py-4 text-[13px] whitespace-nowrap">
@@ -688,6 +703,19 @@ const Expenses = ({ user }) => {
               />
             </div>
           </div>
+
+          <label className="flex items-start gap-2 rounded-lg border border-border p-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!formData.is_capital}
+              onChange={(ev) => setFormData(prev => ({ ...prev, is_capital: ev.target.checked }))}
+              className="mt-0.5"
+            />
+            <span className="text-xs">
+              <span className="font-bold text-text-primary">Capital purchase (fixed asset)</span>
+              <span className="block text-text-muted">For things that last years, like solar, a tube well or a tractor. Reduces cash but is not counted in expenses or profit. Also add the asset under Machinery so it shows in Assets.</span>
+            </span>
+          </label>
 
           <div className="flex flex-col gap-1">
             <label className="text-xs font-bold text-text-muted uppercase">Notes</label>

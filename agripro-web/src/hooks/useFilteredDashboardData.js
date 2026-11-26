@@ -59,7 +59,8 @@ export const useFilteredDashboardData = () => {
       // Cash in hand is a running balance, so it needs every date, not just the selected period.
       allRevenue: pointInTime(revenue),
       allExpenses: pointInTime(expenses),
-      expenses: period(expenses),
+      // Operating expenses only: capital purchases (fixed assets) are not P&L costs.
+      expenses: period(expenses).filter(e => !e.is_capital),
       attendance: period(attendance),
       machinery: pointInTime(machinery),
       livestock: pointInTime(livestock),
