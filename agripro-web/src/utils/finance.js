@@ -89,3 +89,9 @@ export function creditReceivable(entries = []) {
 export function loansReceivable(loans = []) {
   return round2(loans.filter(l => l.type === 'Lent').reduce((s, l) => s + loanOutstanding(l), 0));
 }
+
+/** Value of the land a farm owns: rented (leased) acres are farmed but are not an asset. */
+export function ownedLandValue(farm) {
+  const owned = Math.max(0, num(farm?.area_acres) - num(farm?.leased_acres));
+  return round2(owned * num(farm?.land_value));
+}

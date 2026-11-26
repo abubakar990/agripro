@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { IconFileDownload, IconPrinter, IconScale, IconReceipt, IconPackage, IconUsers } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
-import { creditOutstanding, loanOutstanding, toNumber as num } from '../../utils/finance';
+import { creditOutstanding, loanOutstanding, cashBalance, ownedLandValue } from '../../utils/finance';
 import { groupByParty, sumAmounts } from '../../utils/partyGroups';
 import Button from '../shared/Button';
 import * as XLSX from 'xlsx';
@@ -19,6 +19,9 @@ const Reports = () => {
 
   // Revenue & expenses drive the P&L, which is period-based -> apply the global date filter.
   const revenue = useFilteredData(useRevenue(farmIds).data || []);
+  // Cash is a running balance: all dates, current farm filter (same as the Dashboard card).
+  const allRevenue = useFarmFilteredData(useRevenue(farmIds).data || []);
+  const allExpenses = useFarmFilteredData(useExpenses(farmIds).data || []);
   const periodExpenses = useFilteredData(useExpenses(farmIds).data || []);
   // P&L uses operating expenses only; capital purchases are assets (see Machinery / Balance Sheet).
   const expenses = useMemo(() => periodExpenses.filter(e => !e.is_capital), [periodExpenses]);
@@ -81,11 +84,12 @@ const Reports = () => {
 
     const assets = {
       // land_value is stored per-acre (see Farms.jsx), so total = acres x per-acre value.
-      'Land Value': farms.reduce((sum, f) => sum + (num(f.area_acres) * num(f.land_value)), 0),
+      // land_value is per acre; rented (leased) acres are not owned, so they are excluded.
+      'Land Value': farms.reduce((sum, f) => sum + ownedLandValue(f), 0),
       ...machineryByCategory,
       ...livestockByCategory,
       ...inventoryByCategory,
-      'Estimated Cash / Bank': Math.max(0, totalRev - totalExp),
+      'Cash in Hand': Math.max(0, cashBalance({ revenue: allRevenue, expenses: allExpenses, loans, creditEntries })),
       'Total Receivables': creditReceivable + loansReceivable,
     };
 
@@ -168,7 +172,7 @@ const Reports = () => {
       totalLivestock,
       totalInventory
     };
-  }, [revenue, expenses, farms, machinery, livestock, inventory, creditEntries, loans]);
+  }, [revenue, expenses, allRevenue, allExpenses, farms, machinery, livestock, inventory, creditEntries, loans]);
 
   const exportExcel = () => {
     const wb = XLSX.utils.book_new();

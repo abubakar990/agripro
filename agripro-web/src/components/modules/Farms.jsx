@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IconPlus, IconBuildingCommunity, IconMapPin, IconMaximize, IconUser, IconTrash, IconEdit, IconMap, IconLayersIntersect } from '@tabler/icons-react';
 import { formatPKR } from '../../utils/format';
+import { ownedLandValue } from '../../utils/finance';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
@@ -33,13 +34,14 @@ const Farms = ({ currentOrg }) => {
     area_acres: '',
     ownership: 'Owned',
     land_value: '',
+    leased_acres: '',
     status: 'Active'
   });
 
   const stats = useMemo(() => {
     const totalArea = farms.length;
     const totalAcres = farms.reduce((sum, f) => sum + (parseFloat(f.area_acres) || 0), 0);
-    const totalValue = farms.reduce((sum, f) => sum + ((parseFloat(f.area_acres) || 0) * (parseFloat(f.land_value) || 0)), 0);
+    const totalValue = farms.reduce((sum, f) => sum + ownedLandValue(f), 0);
     const activeFarms = farms.filter(f => f.status === 'Active').length;
     
     return {
@@ -64,6 +66,7 @@ const Farms = ({ currentOrg }) => {
       area_acres: farm.area_acres || '',
       ownership: farm.ownership,
       land_value: farm.land_value,
+      leased_acres: farm.leased_acres ? String(Number(farm.leased_acres)) : '',
       status: farm.status
     });
     setIsModalOpen(true);
@@ -94,7 +97,8 @@ const Farms = ({ currentOrg }) => {
             ownership: formData.ownership,
             status: formData.status,
             area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
-            land_value: parseFloat(formData.land_value) || 0
+            land_value: parseFloat(formData.land_value) || 0,
+            leased_acres: parseFloat(formData.leased_acres) || 0
           })
           .eq('id', editingFarm.id);
         if (error) throw error;
@@ -107,7 +111,8 @@ const Farms = ({ currentOrg }) => {
           status: formData.status,
           org_id: effectiveOrgId,
           area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
-          land_value: parseFloat(formData.land_value) || 0
+          land_value: parseFloat(formData.land_value) || 0,
+          leased_acres: parseFloat(formData.leased_acres) || 0
         }]);
         if (error) throw error;
         toast.success('Farm created successfully');
@@ -123,6 +128,7 @@ const Farms = ({ currentOrg }) => {
         area_acres: '',
         ownership: 'Owned',
         land_value: '',
+        leased_acres: '',
         status: 'Active'
       });
     } catch (error) {
@@ -259,7 +265,7 @@ const Farms = ({ currentOrg }) => {
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 text-sm">
                     <IconMaximize size={16} className="text-text-muted" />
-                    <span className="text-text-secondary">Area: <span className="text-text-primary font-medium">{farm.area_acres ? `${farm.area_acres} Acres` : farm.area}</span></span>
+                    <span className="text-text-secondary">Area: <span className="text-text-primary font-medium">{farm.area_acres ? `${Number(farm.area_acres)} Acres` : farm.area}</span>{Number(farm.leased_acres) > 0 && <span className="text-text-muted"> ({Number(farm.leased_acres)} rented)</span>}</span>
                   </div>
                   {farmPlots.filter(p => p.farm_id === farm.id).length > 0 && (
                     <div className="flex items-center gap-3 text-sm">
@@ -273,7 +279,7 @@ const Farms = ({ currentOrg }) => {
                   </div>
                   <div className="mt-4 pt-4 border-t border-border-light">
                     <span className="text-[10px] font-bold text-text-muted uppercase block mb-1">Estimated Value</span>
-                    <span className="text-lg font-bold text-primary font-pkr">{formatPKR((parseFloat(farm.area_acres) || 0) * (parseFloat(farm.land_value) || 0))}</span>
+                    <span className="text-lg font-bold text-primary font-pkr">{formatPKR(ownedLandValue(farm))}</span>
                   </div>
                 </div>
               </div>
@@ -322,19 +328,36 @@ const Farms = ({ currentOrg }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1 col-span-2">
-              {editingFarm ? (
-                <>
-                  <label className="agri-label">Area (Acres)</label>
-                  <div className="agri-input bg-bg-alt text-text-muted flex items-center h-10 border border-border rounded-md px-3">
-                    {formData.area_acres ? `${parseFloat(formData.area_acres).toFixed(2)} Acres (Calculated from Map)` : 'Draw boundary on map to calculate area'}
-                  </div>
-                </>
-              ) : (
-                <div className="text-xs text-text-muted italic bg-bg-alt p-3 rounded-lg border border-border">
-                  <IconLayersIntersect size={16} className="inline mr-1 text-primary"/>
-                  Note: Farm area will be automatically calculated when you draw the boundary on the map.
-                </div>
-              )}
+              <label className="agri-label">Total Area (Acres)</label>
+              <input
+                type="number"
+                name="area_acres"
+                step="any"
+                min="0"
+                value={formData.area_acres}
+                onChange={handleInputChange}
+                placeholder="e.g. 97"
+                className="agri-input"
+              />
+              <span className="text-[11px] text-text-muted">
+                <IconLayersIntersect size={12} className="inline mr-1 text-primary"/>
+                Enter it here, or draw the boundary on the map to calculate it.
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="agri-label">Rented (Leased) Acres</label>
+              <input
+                type="number"
+                name="leased_acres"
+                step="any"
+                min="0"
+                value={formData.leased_acres}
+                onChange={handleInputChange}
+                placeholder="0"
+                className="agri-input"
+              />
+              <span className="text-[11px] text-text-muted">Farmed but not owned, so not counted in land value.</span>
             </div>
             
             <div className="flex flex-col gap-1">
