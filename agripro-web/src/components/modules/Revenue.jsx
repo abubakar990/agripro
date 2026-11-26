@@ -10,6 +10,8 @@ import { useFilteredData } from '../../hooks/useFilteredData';
 import { useGlobalStore } from '../../store/globalStore';
 import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
 import { toast } from '../../utils/toast';
+import QuantityRateFields from '../shared/QuantityRateFields';
+import { summarizeByItem, itemSuggestions, formatQty } from '../../utils/quantity';
 import { confirmDialog } from '../../utils/confirmDialog';
 
 const Revenue = ({ user }) => {
@@ -48,7 +50,12 @@ const Revenue = ({ user }) => {
     amount: '',
     plot_id: '',
     crop_cycle_id: '',
-    area_acres: ''
+    area_acres: '',
+    item_name: '',
+    quantity: '',
+    unit: '',
+    unit_price: '',
+    note: ''
   });
 
   // Sync default farm_id when farms finish loading
@@ -90,6 +97,10 @@ const Revenue = ({ user }) => {
     return Object.entries(totals).sort((a, b) => b[1] - a[1]);
   }, [revenue]);
 
+  // Quantity totals per item + unit, e.g. "Urea: 25 bag" for the current filters.
+  const itemSummary = useMemo(() => summarizeByItem(revenue), [revenue]);
+  const knownItems = useMemo(() => itemSuggestions(rawRevenue), [rawRevenue]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -124,7 +135,12 @@ const Revenue = ({ user }) => {
       amount: r.amount.toString(),
       plot_id: r.plot_id?.toString() || '',
       crop_cycle_id: r.crop_cycle_id?.toString() || '',
-      area_acres: r.area_acres?.toString() || ''
+      area_acres: r.area_acres?.toString() || '',
+      item_name: r.item_name || '',
+      quantity: r.quantity != null ? String(Number(r.quantity)) : '',
+      unit: r.unit || '',
+      unit_price: r.unit_price != null ? String(Number(r.unit_price)) : '',
+      note: r.note || ''
     });
     
     if (!isKnownCategory) {
@@ -181,7 +197,12 @@ const Revenue = ({ user }) => {
         farm_id: targetFarmId,
         plot_id: formData.plot_id ? parseInt(formData.plot_id) : null,
         crop_cycle_id: formData.crop_cycle_id ? parseInt(formData.crop_cycle_id) : null,
-        area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null
+        area_acres: formData.area_acres ? parseFloat(formData.area_acres) : null,
+        item_name: formData.item_name?.trim() || null,
+        quantity: formData.quantity !== '' && !isNaN(parseFloat(formData.quantity)) ? parseFloat(formData.quantity) : null,
+        unit: formData.unit?.trim() || null,
+        unit_price: formData.unit_price !== '' && !isNaN(parseFloat(formData.unit_price)) ? parseFloat(formData.unit_price) : null,
+        note: formData.note?.trim() || null
       };
 
       if (user?.id) {
@@ -240,7 +261,12 @@ const Revenue = ({ user }) => {
       amount: '',
       plot_id: '',
       crop_cycle_id: '',
-      area_acres: ''
+      area_acres: '',
+      item_name: '',
+      quantity: '',
+      unit: '',
+      unit_price: '',
+      note: ''
     });
     setIsModalOpen(true);
   };
@@ -313,6 +339,39 @@ const Revenue = ({ user }) => {
         ))}
       </div>
 
+      {itemSummary.length > 0 && (
+        <div className="agri-card overflow-hidden">
+          <div className="px-6 py-3 border-b border-border">
+            <h3 className="text-sm font-bold text-text-primary">Quantity Sold by Item</h3>
+            <p className="text-[11px] text-text-muted">Only entries with an item name and quantity are counted. Follows the current farm and date filters.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="agri-table-header">
+                  <th className="px-6 py-2">Item</th>
+                  <th className="px-6 py-2 text-right">Total Quantity</th>
+                  <th className="px-6 py-2 text-right">Avg Rate</th>
+                  <th className="px-6 py-2 text-right">Total Amount</th>
+                  <th className="px-6 py-2 text-right">Entries</th>
+                </tr>
+              </thead>
+              <tbody>
+                {itemSummary.map(g => (
+                  <tr key={g.key} className="agri-table-row">
+                    <td className="px-6 py-2 font-bold text-text-primary">{g.item}</td>
+                    <td className="px-6 py-2 text-right font-bold">{formatQty(g.quantity)} {g.unit}</td>
+                    <td className="px-6 py-2 text-right font-pkr text-text-secondary">{formatPKR(g.avgRate)}{g.unit ? ` / ${g.unit}` : ''}</td>
+                    <td className="px-6 py-2 text-right font-pkr text-revenue">{formatPKR(g.amount)}</td>
+                    <td className="px-6 py-2 text-right text-text-muted">{g.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="agri-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -322,6 +381,7 @@ const Revenue = ({ user }) => {
                 <th className="px-6 py-3">Farm</th>
                 <th className="px-6 py-3">Category</th>
                 <th className="px-6 py-3">Description</th>
+                <th className="px-6 py-3">Item / Qty</th>
                 <th className="px-6 py-3">Party</th>
                 <th className="px-6 py-3 text-right">Amount</th>
                 <th className="px-6 py-3 text-right">₨/Acre</th>
@@ -340,6 +400,16 @@ const Revenue = ({ user }) => {
                       </td>
                       <td className="px-6 py-4 font-bold text-text-primary">{r.category}</td>
                       <td className="px-6 py-4 text-text-secondary text-[13px]">{r.description}</td>
+                      <td className="px-6 py-4 text-[13px] whitespace-nowrap">
+                        {r.item_name && <div className="font-bold text-text-primary">{r.item_name}</div>}
+                        {r.quantity != null && (
+                          <div className="text-text-muted">
+                            {formatQty(r.quantity)} {r.unit || ''}
+                            {r.unit_price != null && <> @ {formatPKR(r.unit_price)}</>}
+                          </div>
+                        )}
+                        {!r.item_name && r.quantity == null && <span className="text-text-muted">—</span>}
+                      </td>
                       <td className="px-6 py-4 font-bold">{r.party}</td>
                       <td className="px-6 py-4 text-right font-pkr text-revenue">{formatPKR(r.amount)}</td>
                       <td className="px-6 py-4 text-right font-pkr text-text-secondary">
@@ -368,7 +438,7 @@ const Revenue = ({ user }) => {
                 })
               ) : (
                 <tr>
-                  <td colSpan="8" className="px-6 py-12 text-center">
+                  <td colSpan="9" className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center opacity-40">
                       <IconCash size={48} className="mb-2" />
                       <p className="text-sm font-bold">No revenue records found yet.</p>
@@ -452,6 +522,13 @@ const Revenue = ({ user }) => {
               />
             </div>
           </div>
+
+          <QuantityRateFields
+            formData={formData}
+            setFormData={setFormData}
+            suggestions={knownItems}
+            itemPlaceholder="e.g. Wheat, Rice, Cotton"
+          />
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1">
