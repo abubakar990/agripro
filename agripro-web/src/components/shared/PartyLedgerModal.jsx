@@ -46,9 +46,7 @@ export default function PartyLedgerModal({
     return map;
   }, [farms]);
 
-  if (!party) return null;
-
-  const timeline = party.timeline || [];
+  const timeline = party?.timeline || [];
 
   const filteredTimeline = useMemo(() => {
     if (filterType === 'ALL') return timeline;
@@ -59,9 +57,11 @@ export default function PartyLedgerModal({
     window.print();
   };
 
+  if (!isOpen || !party) return null;
+
   const isNetOwedByUs = party.weOwe > party.theyOwe;
   const isNetOwedToUs = party.theyOwe > party.weOwe;
-  const netAmount = Math.abs(party.netBalance);
+  const netAmount = Math.abs(party.netBalance || 0);
 
   return (
     <Modal
