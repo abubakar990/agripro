@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { IconFileDownload, IconPrinter, IconScale, IconReceipt, IconPackage, IconUsers } from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
 import { creditOutstanding, loanOutstanding, toNumber as num } from '../../utils/finance';
+import { groupByParty, sumAmounts } from '../../utils/partyGroups';
 import Button from '../shared/Button';
 import * as XLSX from 'xlsx';
 
@@ -113,7 +114,7 @@ const Reports = () => {
     }, {});
 
     // Detailed lists for Receivables/Payables
-    const receivablesList = [
+    const receivablesEntries = [
       ...creditEntries.filter(e => e.type === 'Credit Sale').map(e => ({
         id: `c-${e.id}`,
         party: e.party,
@@ -129,8 +130,9 @@ const Reports = () => {
         dueDate: l.due_date
       }))
     ].filter(i => i.amount > 0);
+    const receivablesList = groupByParty(receivablesEntries);
 
-    const payablesList = [
+    const payablesEntries = [
       ...creditEntries.filter(e => e.type === 'Credit Purchase').map(e => ({
         id: `c-${e.id}`,
         party: e.party,
@@ -146,6 +148,7 @@ const Reports = () => {
         dueDate: l.due_date
       }))
     ].filter(i => i.amount > 0);
+    const payablesList = groupByParty(payablesEntries);
 
     return { 
       assets, 
@@ -395,13 +398,18 @@ const Reports = () => {
                   <div key={item.id} className="flex justify-between items-center text-[13px] p-2 bg-bg rounded">
                     <div className="flex flex-col">
                       <span className="font-bold">{item.party}</span>
-                      <span className="text-[10px] text-text-muted">{item.type} {item.dueDate && `• Due: ${formatDate(item.dueDate)}`}</span>
+                      <span className="text-[10px] text-text-muted">{item.type}{item.count > 1 && ` • ${item.count} entries`} {item.dueDate && `• Due: ${formatDate(item.dueDate)}`}</span>
                     </div>
                     <span className="font-bold text-revenue">{formatPKR(item.amount)}</span>
                   </div>
                 ))}
-                {financialData.receivablesList.length === 0 && (
+                {financialData.receivablesList.length === 0 ? (
                   <p className="text-sm text-text-muted italic text-center py-4">No active receivables</p>
+                ) : (
+                  <div className="flex justify-between items-center text-[13px] px-2 pt-2 border-t border-border">
+                    <span className="font-bold uppercase text-text-muted">Total Receivable</span>
+                    <span className="font-bold text-revenue">{formatPKR(sumAmounts(financialData.receivablesList))}</span>
+                  </div>
                 )}
               </div>
             </div>
@@ -414,7 +422,7 @@ const Reports = () => {
                     <div className="flex flex-col">
                       <span className="font-bold">{item.party}</span>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-text-muted">{item.type} {item.dueDate && `• Due: ${formatDate(item.dueDate)}`}</span>
+                        <span className="text-[10px] text-text-muted">{item.type}{item.count > 1 && ` • ${item.count} entries`} {item.dueDate && `• Due: ${formatDate(item.dueDate)}`}</span>
                         {item.dueDate && new Date(item.dueDate) < new Date() && (
                           <span className="text-[8px] font-bold text-expense uppercase">Overdue</span>
                         )}
@@ -423,8 +431,13 @@ const Reports = () => {
                     <span className="font-bold text-expense">{formatPKR(item.amount)}</span>
                   </div>
                 ))}
-                {financialData.payablesList.length === 0 && (
+                {financialData.payablesList.length === 0 ? (
                   <p className="text-sm text-text-muted italic text-center py-4">No active payables</p>
+                ) : (
+                  <div className="flex justify-between items-center text-[13px] px-2 pt-2 border-t border-border">
+                    <span className="font-bold uppercase text-text-muted">Total Payable</span>
+                    <span className="font-bold text-expense">{formatPKR(sumAmounts(financialData.payablesList))}</span>
+                  </div>
                 )}
               </div>
             </div>
