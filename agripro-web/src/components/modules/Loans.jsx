@@ -1,7 +1,17 @@
 import { useMemo, useState, useEffect } from 'react';
-import { IconPlus, IconBuildingBank, IconTrendingUp, IconTrendingDown, IconTrash, IconReceipt2 } from '@tabler/icons-react';
+import {
+  IconPlus,
+  IconBuildingBank,
+  IconTrendingUp,
+  IconTrendingDown,
+  IconTrash,
+  IconReceipt2,
+  IconUsers,
+  IconList,
+  IconChevronDown
+} from '@tabler/icons-react';
 import { formatPKR, formatDate } from '../../utils/format';
-import { paidAmount, loanOutstanding, toNumber as num } from '../../utils/finance';
+import { paidAmount, loanOutstanding, toNumber as num, round2 } from '../../utils/finance';
 import { supabase } from '../../lib/supabase';
 import Button from '../shared/Button';
 import Badge from '../shared/Badge';
@@ -140,6 +150,93 @@ const LoanCard = ({ loan, farm, onRecordRepayment, onOpenLedger, refetch }) => {
   );
 };
 
+const PartyLoanGroup = ({ group, farms, onRecordRepayment, onOpenLedger, refetch }) => {
+  const [expanded, setExpanded] = useState(false);
+  const { party, type, loans, principal, paid, outstanding } = group;
+  const progress = principal > 0 ? Math.min(100, (paid / principal) * 100) : 0;
+  const hasOverdue = loans.some(
+    l => l.due_date && new Date(l.due_date) < new Date() && loanOutstanding(l) > 0
+  );
+  const farmNames = [...new Set(loans.map(l => farms.find(f => f.id === l.farm_id)?.name || 'Unknown Farm'))];
+
+  return (
+    <div className={`agri-card overflow-hidden flex flex-col ${expanded ? 'col-span-full' : ''}`}>
+      <div className="p-4 border-b border-border flex justify-between items-start">
+        <div>
+          <button
+            type="button"
+            onClick={() => onOpenLedger?.(party)}
+            className="text-left font-bold text-text-primary hover:text-primary transition-colors flex items-center gap-1 group"
+            title="Click to view full financial ledger"
+          >
+            <span className="group-hover:underline">{party}</span>
+            <IconReceipt2 size={13} className="opacity-0 group-hover:opacity-100 transition-opacity text-primary" />
+          </button>
+          <p className="text-[11px] text-text-muted uppercase font-bold">
+            {farmNames.join(', ')} · {loans.length} {loans.length === 1 ? 'entry' : 'entries'}
+          </p>
+        </div>
+        <Badge variant={type === 'Borrowed' ? 'danger' : 'success'}>
+          {type === 'Borrowed' ? 'YOU BORROWED' : 'YOU LENT'}
+        </Badge>
+      </div>
+
+      <div className="p-4 space-y-4">
+        <div className="grid grid-cols-3 gap-2 text-[11px]">
+          <div>
+            <span className="text-text-muted block uppercase font-bold">Total Principal</span>
+            <span className="text-sm font-bold text-text-primary">{formatPKR(principal)}</span>
+          </div>
+          <div className="text-center">
+            <span className="text-text-muted block uppercase font-bold">{type === 'Borrowed' ? 'Repaid' : 'Recovered'}</span>
+            <span className="text-sm font-bold text-revenue">{formatPKR(paid)}</span>
+          </div>
+          <div className="text-right">
+            <span className="text-text-muted block uppercase font-bold">Outstanding</span>
+            <span className={`text-sm font-bold ${outstanding > 0 ? (type === 'Borrowed' ? 'text-expense' : 'text-accent-blue') : 'text-revenue'}`}>
+              {formatPKR(outstanding)}
+            </span>
+          </div>
+        </div>
+        <div className="h-2 bg-bg rounded-full overflow-hidden">
+          <div
+            className={`h-full transition-all ${outstanding === 0 ? 'bg-revenue' : type === 'Borrowed' ? 'bg-expense' : 'bg-accent-blue'}`}
+            style={{ width: `${progress}%` }}
+          ></div>
+        </div>
+        <div className="flex justify-end gap-2">
+          {hasOverdue && <Badge variant="danger" className="animate-pulse">OVERDUE</Badge>}
+          {outstanding === 0 && <Badge variant="success">CLEARED</Badge>}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setExpanded(e => !e)}
+        className="px-4 py-3 bg-bg text-xs font-bold text-text-secondary hover:text-primary flex items-center justify-center gap-1"
+      >
+        {expanded ? 'Hide entries' : `Show ${loans.length} ${loans.length === 1 ? 'entry' : 'entries'}`}
+        <IconChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+
+      {expanded && (
+        <div className="p-4 border-t border-border grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {loans.map(loan => (
+            <LoanCard
+              key={loan.id}
+              loan={loan}
+              farm={farms.find(f => f.id === loan.farm_id)}
+              onRecordRepayment={onRecordRepayment}
+              onOpenLedger={onOpenLedger}
+              refetch={refetch}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Loans = () => {
   const currentOrgId = localStorage.getItem('agripro_current_org_id');
   const farmFilter = useGlobalStore(state => state.farmFilter);
@@ -205,6 +302,27 @@ const Loans = () => {
       .reduce((s, l) => s + paidAmount(l), 0);
     
     return { totalBorrowed, totalLent, repaid };
+  }, [loans]);
+
+  const [viewMode, setViewMode] = useState('party');
+
+  // Each loan is its own row (separate principal, due date, repayments), so the
+  // party view aggregates them client-side by normalized party name + direction.
+  const partyGroups = useMemo(() => {
+    const map = new Map();
+    for (const loan of loans) {
+      const name = (loan.party || '').trim().replace(/\s+/g, ' ');
+      const key = `${name.toLowerCase()}|${loan.type}`;
+      if (!map.has(key)) {
+        map.set(key, { key, party: name || 'Unknown', type: loan.type, loans: [], principal: 0, paid: 0, outstanding: 0 });
+      }
+      const g = map.get(key);
+      g.loans.push(loan);
+      g.principal = round2(g.principal + num(loan.principal));
+      g.paid = round2(g.paid + paidAmount(loan));
+      g.outstanding = round2(g.outstanding + loanOutstanding(loan));
+    }
+    return [...map.values()].sort((a, b) => b.outstanding - a.outstanding);
   }, [loans]);
 
   const openAddModal = () => {
@@ -391,8 +509,38 @@ const Loans = () => {
         </div>
       </div>
 
+      <div className="flex justify-end">
+        <div className="inline-flex rounded-lg border border-border overflow-hidden text-xs font-bold">
+          <button
+            type="button"
+            onClick={() => setViewMode('party')}
+            className={`px-3 py-1.5 flex items-center gap-1 ${viewMode === 'party' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-bg'}`}
+          >
+            <IconUsers size={14} /> By Party
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('all')}
+            className={`px-3 py-1.5 flex items-center gap-1 ${viewMode === 'all' ? 'bg-primary text-white' : 'text-text-secondary hover:bg-bg'}`}
+          >
+            <IconList size={14} /> All Entries
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {loans.length > 0 ? (
+        {loans.length > 0 && viewMode === 'party' ? (
+          partyGroups.map(group => (
+            <PartyLoanGroup
+              key={group.key}
+              group={group}
+              farms={farms}
+              onRecordRepayment={handleRecordRepayment}
+              onOpenLedger={(partyName) => setSelectedLedgerParty(partyName)}
+              refetch={refetch}
+            />
+          ))
+        ) : loans.length > 0 ? (
           loans.map(loan => (
             <LoanCard 
               key={loan.id} 
