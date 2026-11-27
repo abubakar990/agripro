@@ -11,6 +11,8 @@ import { useGlobalStore } from '../../store/globalStore';
 import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
 import { toast } from '../../utils/toast';
 import QuantityRateFields from '../shared/QuantityRateFields';
+import FolioInput from '../shared/FolioInput';
+import { parseFolio } from '../../utils/roznamcha';
 import { summarizeByItem, itemSuggestions, formatQty } from '../../utils/quantity';
 import { confirmDialog } from '../../utils/confirmDialog';
 
@@ -55,7 +57,8 @@ const Revenue = ({ user }) => {
     quantity: '',
     unit: '',
     unit_price: '',
-    note: ''
+    note: '',
+    folio: ''
   });
 
   // Sync default farm_id when farms finish loading
@@ -140,7 +143,8 @@ const Revenue = ({ user }) => {
       quantity: r.quantity != null ? String(Number(r.quantity)) : '',
       unit: r.unit || '',
       unit_price: r.unit_price != null ? String(Number(r.unit_price)) : '',
-      note: r.note || ''
+      note: r.note || '',
+      folio: r.folio ? String(r.folio) : ''
     });
     
     if (!isKnownCategory) {
@@ -202,7 +206,8 @@ const Revenue = ({ user }) => {
         quantity: formData.quantity !== '' && !isNaN(parseFloat(formData.quantity)) ? parseFloat(formData.quantity) : null,
         unit: formData.unit?.trim() || null,
         unit_price: formData.unit_price !== '' && !isNaN(parseFloat(formData.unit_price)) ? parseFloat(formData.unit_price) : null,
-        note: formData.note?.trim() || null
+        note: formData.note?.trim() || null,
+        folio: parseFolio(formData.folio)
       };
 
       if (user?.id) {
@@ -266,7 +271,8 @@ const Revenue = ({ user }) => {
       quantity: '',
       unit: '',
       unit_price: '',
-      note: ''
+      note: '',
+      folio: ''
     });
     setIsModalOpen(true);
   };
@@ -522,6 +528,8 @@ const Revenue = ({ user }) => {
               />
             </div>
           </div>
+
+          <FolioInput value={formData.folio} onChange={(v) => setFormData(prev => ({ ...prev, folio: v }))} />
 
           <QuantityRateFields
             formData={formData}

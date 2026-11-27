@@ -11,6 +11,8 @@ import { useGlobalStore } from '../../store/globalStore';
 import { resolveArea, totalArea as calcTotalArea, formatPerAcre } from '../../utils/perAcreCalc';
 import { toast } from '../../utils/toast';
 import QuantityRateFields from '../shared/QuantityRateFields';
+import FolioInput from '../shared/FolioInput';
+import { parseFolio } from '../../utils/roznamcha';
 import { summarizeByItem, itemSuggestions, formatQty } from '../../utils/quantity';
 import { confirmDialog } from '../../utils/confirmDialog';
 
@@ -63,6 +65,7 @@ const Expenses = ({ user }) => {
     unit: '',
     unit_price: '',
     note: '',
+    folio: '',
     sub_category: '',
     is_capital: false
   });
@@ -168,6 +171,7 @@ const Expenses = ({ user }) => {
       unit: e.unit || '',
       unit_price: e.unit_price != null ? String(Number(e.unit_price)) : '',
       note: e.note || '',
+      folio: e.folio ? String(e.folio) : '',
       sub_category: !e.sub_category ? ''
         : subCategoriesOf(e.category).some(c => c.name === e.sub_category) ? e.sub_category : 'ADD_NEW_SUB',
       is_capital: !!e.is_capital
@@ -258,7 +262,8 @@ const Expenses = ({ user }) => {
         quantity: formData.quantity !== '' && !isNaN(parseFloat(formData.quantity)) ? parseFloat(formData.quantity) : null,
         unit: formData.unit?.trim() || null,
         unit_price: formData.unit_price !== '' && !isNaN(parseFloat(formData.unit_price)) ? parseFloat(formData.unit_price) : null,
-        note: formData.note?.trim() || null
+        note: formData.note?.trim() || null,
+        folio: parseFolio(formData.folio)
       };
 
       if (user?.id) {
@@ -323,6 +328,7 @@ const Expenses = ({ user }) => {
       unit: '',
       unit_price: '',
       note: '',
+      folio: '',
       sub_category: '',
       is_capital: false
     });
@@ -597,6 +603,8 @@ const Expenses = ({ user }) => {
               />
             </div>
           </div>
+
+          <FolioInput value={formData.folio} onChange={(v) => setFormData(prev => ({ ...prev, folio: v }))} />
 
           <QuantityRateFields
             formData={formData}

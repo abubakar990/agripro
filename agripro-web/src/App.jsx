@@ -31,6 +31,7 @@ const SprayLog = React.lazy(() => import('./components/modules/SprayLog'));
 const MandiPrices = React.lazy(() => import('./components/modules/MandiPrices'));
 const VendorsBuyers = React.lazy(() => import('./components/modules/VendorsBuyers'));
 const Reports = React.lazy(() => import('./components/modules/Reports'));
+const Roznamcha = React.lazy(() => import('./components/modules/Roznamcha'));
 const Billing = React.lazy(() => import('./components/modules/settings/Billing'));
 const TeamSettings = React.lazy(() => import('./components/modules/settings/TeamSettings'));
 const AdminPanel = React.lazy(() => import('./components/modules/settings/AdminPanel'));
@@ -241,6 +242,7 @@ function App() {
                   <Route path="/livestock" element={<Livestock user={session.user} />} />
                   <Route path="/parties" element={<VendorsBuyers />} />
                   <Route path="/reports" element={<Reports />} />
+                  <Route path="/roznamcha" element={<Roznamcha />} />
                   <Route path="*" element={
                     <div className="agri-card p-12 flex flex-col items-center justify-center text-center">
                       <div className="w-16 h-16 bg-bg rounded-full flex items-center justify-center text-primary mb-4">

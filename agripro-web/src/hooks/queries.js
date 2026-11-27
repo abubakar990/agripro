@@ -83,6 +83,19 @@ export const useVendorsBuyers = (orgId) => {
   });
 };
 
+// Khata register: folio (page) number -> khata name, per organisation.
+export const useKhatas = (orgId) => {
+  return useQuery({
+    queryKey: ['khatas', orgId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('khatas').select('*').eq('org_id', orgId).order('folio');
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!orgId
+  });
+};
+
 export const useCategories = (orgId) => {
   return useQuery({
     queryKey: ['categories', orgId],

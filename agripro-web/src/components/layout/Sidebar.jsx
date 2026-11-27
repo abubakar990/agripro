@@ -21,7 +21,8 @@ import {
   IconSettings,
   IconBuildingCommunity,
   IconShieldLock,
-  IconX
+  IconX,
+  IconNotebook
 } from '@tabler/icons-react';
 
 const Sidebar = ({ isCollapsed, setIsCollapsed, creditEntries = [], currentOrg, isSystemAdmin, onClose }) => {
@@ -44,6 +45,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, creditEntries = [], currentOrg, 
     {
       title: 'FINANCIALS',
       items: [
+        { name: 'Roznamcha', path: '/roznamcha', icon: IconNotebook },
         { name: 'Revenue', path: '/revenue', icon: IconCash },
         { name: 'Expenses', path: '/expenses', icon: IconReceipt2 },
         { name: 'Credit Ledger', path: '/credit', icon: IconCreditCard, badge: overdueCount > 0 ? overdueCount : null },

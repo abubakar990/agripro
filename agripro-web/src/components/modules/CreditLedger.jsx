@@ -7,6 +7,8 @@ import Button from '../shared/Button';
 import Badge from '../shared/Badge';
 import Modal from '../shared/Modal';
 import PartySelect from '../shared/PartySelect';
+import FolioInput from '../shared/FolioInput';
+import { parseFolio } from '../../utils/roznamcha';
 import PartyLedgerModal from '../shared/PartyLedgerModal';
 import { useCreditEntries, useFarms } from '../../hooks/queries';
 import { useFarmFilteredData } from '../../hooks/useFilteredData';
@@ -178,7 +180,8 @@ const CreditLedger = () => {
     total_amount: '',
     advance: '0',
     due_date: '',
-    note: ''
+    note: '',
+    folio: ''
   });
 
   // Sync default farm_id when farms finish loading
@@ -223,7 +226,8 @@ const CreditLedger = () => {
       total_amount: '',
       advance: '0',
       due_date: '',
-      note: ''
+      note: '',
+      folio: ''
     });
     setIsModalOpen(true);
   };
@@ -262,7 +266,8 @@ const CreditLedger = () => {
         total_amount: totalAmount,
         advance: parseFloat(formData.advance) || 0,
         due_date: formData.due_date ? formData.due_date : null,
-        note: formData.note ? formData.note.trim() : null
+        note: formData.note ? formData.note.trim() : null,
+        folio: parseFolio(formData.folio)
       };
 
       if (currentUserId) {
@@ -502,6 +507,7 @@ const CreditLedger = () => {
                 onChange={e => setFormData({...formData, due_date: e.target.value})}
               />
             </div>
+            <FolioInput value={formData.folio} onChange={(v) => setFormData(prev => ({ ...prev, folio: v }))} />
             <div className="col-span-2">
               <label className="agri-label">Note (Optional)</label>
               <textarea 
